@@ -2,19 +2,24 @@ package com.saas.procurement.config;
 
 import java.util.List;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+/**
+ * Stateless JWT security for the REST API (blueprint Appendix E).
+ * Authentication = "who are you" (JWT). Authorization = role checks with @PreAuthorize plus
+ * company/object checks inside services (Appendix B and F).
+ */
 @Configuration
 @EnableMethodSecurity
 public class SecurityConfig {
@@ -29,13 +34,26 @@ public class SecurityConfig {
 			"/actuator/info",
 			"/v3/api-docs/**",
 			"/swagger-ui/**",
-			"/swagger-ui.html"
+			"/swagger-ui.html",
+			"/error"
 	};
+
+	private final SecurityErrorHandlers errorHandlers;
+	private final JwtAuthenticationConverter jwtAuthenticationConverter;
+	private final List<String> allowedOrigins;
+
+	public SecurityConfig(SecurityErrorHandlers errorHandlers, JwtAuthenticationConverter jwtAuthenticationConverter,
+			@Value("${app.cors.allowed-origins}") List<String> allowedOrigins) {
+		this.errorHandlers = errorHandlers;
+		this.jwtAuthenticationConverter = jwtAuthenticationConverter;
+		this.allowedOrigins = allowedOrigins;
+	}
 
 	@Bean
 	SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 		http
-				// Stateless bearer-token REST API: no session cookies, so CSRF protection is not needed.
+				// Stateless bearer-token API: the token is sent in the Authorization header, not a cookie,
+				// so CSRF protection is not needed. Revisit this if cookies are introduced.
 				.csrf(AbstractHttpConfigurer::disable)
 				.cors(cors -> cors.configurationSource(corsConfigurationSource()))
 				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -46,21 +64,28 @@ public class SecurityConfig {
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers(PUBLIC_ENDPOINTS).permitAll()
 						.anyRequest().authenticated())
-				// Unauthenticated requests get 401 instead of a redirect to /login.
+				// Validate "Authorization: Bearer <jwt>" on every protected request.
+				.oauth2ResourceServer(oauth -> oauth
+						.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter))
+						.authenticationEntryPoint(errorHandlers)
+						.accessDeniedHandler(errorHandlers))
+				// JSON 401/403 instead of redirects or empty bodies.
 				.exceptionHandling(ex -> ex
-						.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)));
-		// TODO (Day 9): add .oauth2ResourceServer(oauth -> oauth.jwt(...)) once JWT issuing is implemented.
+						.authenticationEntryPoint(errorHandlers)
+						.accessDeniedHandler(errorHandlers));
 		return http.build();
 	}
 
 	@Bean
 	CorsConfigurationSource corsConfigurationSource() {
 		CorsConfiguration config = new CorsConfiguration();
-		// React dev server (Vite). Never use "*" together with credentials.
-		config.setAllowedOrigins(List.of("http://localhost:5173"));
+		// Explicit allowlist only. Never use "*" together with credentials.
+		config.setAllowedOrigins(allowedOrigins);
 		config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 		config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+		config.setExposedHeaders(List.of("X-Trace-Id"));
 		config.setAllowCredentials(true);
+		config.setMaxAge(3600L);
 
 		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
 		source.registerCorsConfiguration("/api/**", config);

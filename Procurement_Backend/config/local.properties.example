@@ -1,0 +1,7 @@
+# Copy this file to config/local.properties (git-ignored) and fill in real values.
+spring.datasource.username=postgres
+spring.datasource.password=CHANGE_ME
+
+# JWT signing secret: at least 32 random bytes. Generate one with:
+#   openssl rand -base64 48
+app.jwt.secret=CHANGE_ME_TO_A_LONG_RANDOM_SECRET
