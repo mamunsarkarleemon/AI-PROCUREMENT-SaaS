@@ -60,7 +60,7 @@ Demo data is only loaded into an empty database. To start with no demo data set 
 | | Buyer | Supplier | Admin |
 |---|---|---|---|
 | Dashboard with stats, 30-day chart, recent orders | ✔ | ✔ | ✔ |
-| **Marketplace** – all products + all open buying requests | ✔ | ✔ | — |
+| **Marketplace** – top rated, top selling, all products (paged) + open buying requests | ✔ | ✔ | ✔ |
 | **Buy now** at the listed price | ✔ | | |
 | **Negotiate** – offer → counter-offer → accept/reject → order | ✔ | ✔ | view |
 | **Post a buying request** (with reference photos) | ✔ | | |
@@ -68,6 +68,10 @@ Demo data is only loaded into an empty database. To start with no demo data set 
 | Compare quotes and **accept one → order** | ✔ | | |
 | **My products** – add/edit/hide/delete, photos + short video, stock, MOQ | | ✔ | all products |
 | **Orders** – pending → confirmed → shipped → delivered / cancelled | own | own | all |
+| **Receive partly** – accept the good units, pay for those, send the rest back | ✔ | | |
+| **Confirm a return** – returned units go back into stock | | ✔ | ✔ |
+| **Rate and review** received products (1–5 stars) | ✔ | | |
+| **React** to other people's reviews | ✔ | ✔ | ✔ |
 | **Reports** by date range, supplier, buyer, product + CSV export | own | own | all + filters |
 | Profile & password | ✔ | ✔ | ✔ |
 | **Users** – create, edit, activate/deactivate, delete | | | ✔ |
@@ -76,6 +80,8 @@ Demo data is only loaded into an empty database. To start with no demo data set 
 | Notifications (bell icon) | ✔ | ✔ | ✔ |
 
 Order rules: the **supplier** confirms (stock is reduced) and ships; the **buyer** marks it received; either can cancel while pending (supplier also while confirmed — stock is given back).
+
+Partial receipt: if 100 were ordered and 20 arrive damaged, the buyer accepts 80 and pays for 80. The other 20 go back to the supplier and return to stock when the supplier confirms them.
 
 ---
 
@@ -102,7 +108,9 @@ contact_messages            (landing page contact form)
 | `buy_requests` | What a buyer wants to buy: quantity, budget, needed-by date. |
 | `quotes` | A supplier's answer to a buy request. |
 | `negotiations` / `negotiation_messages` | Price bargaining on a product and every offer in it. |
-| `orders` | Orders with price snapshot and status. |
+| `orders` | Orders with price snapshot, status, and received/returned quantities. |
+| `product_reviews` | A buyer's 1–5 star rating and comment on a product they received. |
+| `review_reactions` | Like / love / helpful / dislike on a review, one per user. |
 | `notifications` | Messages under the bell icon. |
 | `menus` / `role_menu_access` | Sidebar menus and which role may use them. |
 | `contact_messages` | Messages from the website's contact form. |

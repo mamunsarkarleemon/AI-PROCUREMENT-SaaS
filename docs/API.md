@@ -52,7 +52,9 @@ Register body:
 ## Products
 | Method | Endpoint | Access | Purpose |
 |---|---|---|---|
-| GET | `/products?q=box&categoryId=1` | Buyer/Supplier `[marketplace]`, Admin | Marketplace search |
+| GET | `/products?q=box&categoryId=1` | Buyer/Supplier `[marketplace]`, Admin | Marketplace search (whole list) |
+| GET | `/products/page?q=&categoryId=&sort=rating&page=0&size=12` | Buyer/Supplier `[marketplace]`, Admin | Marketplace, one page at a time → `{items, page, size, totalItems, totalPages}`. `page` starts at 0, `size` max 48. `sort`: `newest`, `rating`, `selling`, `price_asc`, `price_desc` |
+| GET | `/products/highlights` | Buyer/Supplier `[marketplace]`, Admin | `{topRated, topSelling}`, 4 products each |
 | GET | `/products/{id}` | Any | Product details with photos/videos |
 | GET | `/products/mine` | Supplier `[my_products]` | My products |
 | POST | `/products` | Supplier `[my_products]` | Create |
@@ -68,6 +70,7 @@ Product body:
 { "name": "Kraft Paper Food Box 750ml", "description": "Grease resistant", "categoryId": 1,
   "unit": "carton", "price": 85.00, "stockQty": 400, "minOrderQty": 10, "status": "ACTIVE" }
 ```
+Products also return `ratingAvg`, `ratingCount` and `soldQty` (units actually received by buyers).
 Uploads: JPG/PNG/WEBP/GIF up to 5 MB, MP4/WEBM/MOV up to 50 MB. Files are served at `http://localhost:8081/uploads/...`.
 
 ## Buying requests & quotes
@@ -92,6 +95,16 @@ Uploads: JPG/PNG/WEBP/GIF up to 5 MB, MP4/WEBM/MOV up to 50 MB. Files are served
 Request body: `{ "title", "description", "categoryId", "quantity", "unit", "targetPrice", "neededBy": "2026-12-01", "deliveryCity" }`
 Quote body: `{ "pricePerUnit": 44.0, "quantity": 200, "deliveryDays": 14, "productId": null, "message": "..." }`
 
+## Reviews and reactions
+| Method | Endpoint | Access | Purpose |
+|---|---|---|---|
+| GET | `/products/{id}/reviews` | Any | `{average, count, breakdown, canReview, myReview, items[]}` |
+| POST | `/products/{id}/reviews` | Buyer who received the product | Add or update my review `{rating: 1-5, comment}` |
+| DELETE | `/reviews/{id}` | Author, Admin | Remove a review |
+| PUT | `/reviews/{id}/reaction` | Anyone except the author | `{reaction: "LIKE" \| "LOVE" \| "HELPFUL" \| "DISLIKE"}`, or `null` to remove mine |
+
+Each write returns the updated list, in the same shape as the GET.
+
 ## Negotiations
 | Method | Endpoint | Access | Purpose |
 |---|---|---|---|
@@ -111,6 +124,10 @@ The response has `myTurn: true` when you must answer.
 | GET | `/orders/{id}` | Buyer, supplier of the order, Admin | Details. `nextStatuses` = what you may change it to |
 | POST | `/orders` | Buyer | Buy now `{productId, quantity, note}` (checks MOQ and stock) |
 | PUT | `/orders/{id}/status` | See rules | `{status}` |
+| POST | `/orders/{id}/receive` | Buyer of a shipped order | Receive in full or partly `{receivedQty, reason}`. `reason` is required when some units are returned |
+| POST | `/orders/{id}/return/confirm` | Supplier of the order, Admin | The returned units came back: adds them to stock, once |
+
+Partial receipt: `totalAmount` becomes received units × unit price, `orderedAmount` keeps the full value, and `returnStatus` goes `NONE` → `PENDING` → `CONFIRMED`. An order with a return can no longer change status.
 
 Status rules: Supplier `PENDING→CONFIRMED` (stock reduced), `CONFIRMED→SHIPPED`, `PENDING/CONFIRMED→CANCELLED` (stock returned) · Buyer `PENDING→CANCELLED`, `SHIPPED→DELIVERED` · Admin: any.
 
@@ -133,5 +150,7 @@ Status rules: Supplier `PENDING→CONFIRMED` (stock reduced), `CONFIRMED→SHIPP
 | PUT | `/admin/menu-access/{menuKey}/{BUYER\|SUPPLIER}` | `{enabled: true \| false}` |
 | POST / PUT / DELETE | `/admin/categories[/{id}]` | `{name}` |
 | GET / DELETE | `/admin/messages[/{id}]` | Contact-form messages |
+
+Admins also have the Marketplace menu.
 
 Menu keys: `dashboard`, `marketplace`, `my_products`, `my_requests`, `my_quotes`, `negotiations`, `orders`, `reports`, `profile` (dashboard and profile are always on).
