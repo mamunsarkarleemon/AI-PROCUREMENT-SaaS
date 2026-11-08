@@ -201,6 +201,10 @@ public class DataSeeder implements CommandLineRunner {
 		o.setStatus(status);
 		o.setSource(source);
 		o.setCreatedAt(LocalDateTime.now().minusDays(daysAgo).withHour(10).withMinute(30));
+		if (status == OrderStatus.DELIVERED) {
+			o.setReceivedQty(qty);
+			p.setSoldQty(p.getSoldQty() + qty);
+		}
 		orders.save(o);
 	}
 

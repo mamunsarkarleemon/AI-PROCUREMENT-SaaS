@@ -1,6 +1,7 @@
 package com.saas.procurement.order;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 import com.saas.procurement.common.AuditedEntity;
 import com.saas.procurement.negotiation.Negotiation;
@@ -70,6 +71,7 @@ public class PurchaseOrder extends AuditedEntity {
 	@Column(name = "unit_price", nullable = false, precision = 14, scale = 2)
 	private BigDecimal unitPrice;
 
+	/** What the buyer pays: the full price, or only the received units after a partial delivery. */
 	@Column(name = "total_amount", nullable = false, precision = 14, scale = 2)
 	private BigDecimal totalAmount;
 
@@ -79,6 +81,34 @@ public class PurchaseOrder extends AuditedEntity {
 
 	@Column(columnDefinition = "TEXT")
 	private String note;
+
+	/** Good units the buyer accepted. Empty until the order is delivered. */
+	@Column(name = "received_qty")
+	private Integer receivedQty;
+
+	/** Damaged units the buyer sent back. */
+	@Column(name = "returned_qty", nullable = false)
+	private int returnedQty;
+
+	@Column(name = "return_reason", columnDefinition = "TEXT")
+	private String returnReason;
+
+	@Enumerated(EnumType.STRING)
+	@Column(name = "return_status", nullable = false)
+	private ReturnStatus returnStatus = ReturnStatus.NONE;
+
+	@Column(name = "return_confirmed_at")
+	private LocalDateTime returnConfirmedAt;
+
+	/** True when part of this order was sent back. Such an order is settled and its status stays fixed. */
+	public boolean hasReturn() {
+		return returnStatus != ReturnStatus.NONE;
+	}
+
+	/** Units that count for reports: what was received, or what was ordered if not delivered yet. */
+	public int effectiveQty() {
+		return receivedQty != null ? receivedQty : quantity;
+	}
 
 	/** Readable number shown in the UI, e.g. ORD-000012 */
 	public String orderNo() {

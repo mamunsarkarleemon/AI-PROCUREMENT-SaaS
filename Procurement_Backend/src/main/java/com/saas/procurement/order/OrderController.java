@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.saas.procurement.order.OrderService.DirectOrderRequest;
+import com.saas.procurement.order.OrderService.ReceiveRequest;
 import com.saas.procurement.security.AuthUser;
 
 import jakarta.validation.Valid;
@@ -47,6 +48,21 @@ public class OrderController {
 	@ResponseStatus(HttpStatus.CREATED)
 	public OrderDto buyNow(@AuthenticationPrincipal AuthUser me, @Valid @RequestBody DirectOrderRequest req) {
 		return service.createDirect(me, req);
+	}
+
+	/** Buyer: receive a shipped order, in full or partly. */
+	@PreAuthorize("hasRole('BUYER')")
+	@PostMapping("/{id}/receive")
+	public OrderDto receive(@AuthenticationPrincipal AuthUser me, @PathVariable Long id,
+			@Valid @RequestBody ReceiveRequest body) {
+		return service.receive(me, id, body);
+	}
+
+	/** Supplier or admin: the returned units came back, add them to stock. */
+	@PreAuthorize("hasRole('SUPPLIER') or hasRole('ADMIN')")
+	@PostMapping("/{id}/return/confirm")
+	public OrderDto confirmReturn(@AuthenticationPrincipal AuthUser me, @PathVariable Long id) {
+		return service.confirmReturn(me, id);
 	}
 
 	public record StatusChange(@NotNull OrderStatus status) {

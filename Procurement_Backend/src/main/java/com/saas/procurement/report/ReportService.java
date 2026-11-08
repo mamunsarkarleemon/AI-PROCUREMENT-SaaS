@@ -129,7 +129,7 @@ public class ReportService {
 		Map<String, List<PurchaseOrder>> grouped = orders.stream()
 				.collect(Collectors.groupingBy(o -> o.getProductName() + "|" + o.getUnit()));
 		return grouped.values().stream().map(list -> new ProductRow(list.get(0).getProductName(),
-				list.get(0).getUnit(), list.stream().mapToLong(PurchaseOrder::getQuantity).sum(), list.size(), sum(list)))
+				list.get(0).getUnit(), list.stream().mapToLong(PurchaseOrder::effectiveQty).sum(), list.size(), sum(list)))
 				.sorted(Comparator.comparing(ProductRow::amount).reversed()).toList();
 	}
 

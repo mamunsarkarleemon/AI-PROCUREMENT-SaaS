@@ -3,6 +3,8 @@ package com.saas.procurement.product;
 import java.util.List;
 
 import org.springframework.data.domain.Limit;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
@@ -20,6 +22,22 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 			order by p.createdAt desc
 			""")
 	List<Product> search(ProductStatus status, UserStatus supplierStatus, Long categoryId, String q);
+
+	/** Same search as above, one page at a time; the Pageable decides the sort order. */
+	@Query("""
+			select p from Product p join p.supplier s
+			where p.status = :status and s.status = :supplierStatus
+			  and (:categoryId is null or p.category.id = :categoryId)
+			  and (lower(p.name) like :q or lower(coalesce(p.description, '')) like :q
+			       or lower(coalesce(s.companyName, s.fullName)) like :q)
+			""")
+	Page<Product> searchPage(ProductStatus status, UserStatus supplierStatus, Long categoryId, String q, Pageable pageable);
+
+	List<Product> findByStatusAndSupplierStatusAndRatingCountGreaterThan(ProductStatus status, UserStatus supplierStatus,
+			int ratingCount, Pageable pageable);
+
+	List<Product> findByStatusAndSupplierStatusAndSoldQtyGreaterThan(ProductStatus status, UserStatus supplierStatus,
+			int soldQty, Pageable pageable);
 
 	List<Product> findBySupplierIdOrderByCreatedAtDesc(Long supplierId);
 

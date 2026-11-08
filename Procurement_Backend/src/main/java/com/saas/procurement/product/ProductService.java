@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.Locale;
 
 import org.springframework.data.domain.Limit;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -11,6 +13,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.saas.procurement.category.CategoryRepository;
 import com.saas.procurement.common.ApiException;
 import com.saas.procurement.common.Money;
+import com.saas.procurement.common.PageResponse;
 import com.saas.procurement.media.MediaFile;
 import com.saas.procurement.media.MediaService;
 import com.saas.procurement.security.AuthUser;
@@ -33,6 +36,43 @@ public class ProductService {
 	public List<ProductDto> marketplace(String q, Long categoryId) {
 		return repository.search(ProductStatus.ACTIVE, UserStatus.ACTIVE, categoryId, likePattern(q)).stream()
 				.map(ProductDto::from).toList();
+	}
+
+	private static final int MAX_PAGE_SIZE = 48;
+	private static final int HIGHLIGHT_COUNT = 4;
+	private static final Sort TOP_RATED = Sort.by(Sort.Order.desc("ratingAvg"), Sort.Order.desc("ratingCount"), Sort.Order.desc("id"));
+	private static final Sort TOP_SELLING = Sort.by(Sort.Order.desc("soldQty"), Sort.Order.desc("id"));
+
+	public record Highlights(List<ProductDto> topRated, List<ProductDto> topSelling) {
+	}
+
+	/** Marketplace, one page at a time. sort: newest, rating, selling, price_asc, price_desc. */
+	@Transactional(readOnly = true)
+	public PageResponse<ProductDto> marketplacePage(String q, Long categoryId, String sort, int page, int size) {
+		var pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), MAX_PAGE_SIZE), sortOf(sort));
+		return PageResponse.from(repository
+				.searchPage(ProductStatus.ACTIVE, UserStatus.ACTIVE, categoryId, likePattern(q), pageable)
+				.map(ProductDto::from));
+	}
+
+	private static Sort sortOf(String sort) {
+		return switch (sort == null ? "" : sort) {
+			case "rating" -> TOP_RATED;
+			case "selling" -> TOP_SELLING;
+			case "price_asc" -> Sort.by(Sort.Order.asc("price"), Sort.Order.desc("id"));
+			case "price_desc" -> Sort.by(Sort.Order.desc("price"), Sort.Order.desc("id"));
+			default -> Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
+		};
+	}
+
+	/** The "Top rated" and "Top selling" rows at the top of the marketplace. */
+	@Transactional(readOnly = true)
+	public Highlights highlights() {
+		return new Highlights(
+				repository.findByStatusAndSupplierStatusAndRatingCountGreaterThan(ProductStatus.ACTIVE, UserStatus.ACTIVE, 0,
+						PageRequest.of(0, HIGHLIGHT_COUNT, TOP_RATED)).stream().map(ProductDto::from).toList(),
+				repository.findByStatusAndSupplierStatusAndSoldQtyGreaterThan(ProductStatus.ACTIVE, UserStatus.ACTIVE, 0,
+						PageRequest.of(0, HIGHLIGHT_COUNT, TOP_SELLING)).stream().map(ProductDto::from).toList());
 	}
 
 	@Transactional(readOnly = true)

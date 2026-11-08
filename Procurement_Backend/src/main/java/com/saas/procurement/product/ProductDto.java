@@ -16,6 +16,9 @@ public record ProductDto(
 		BigDecimal price,
 		int stockQty,
 		int minOrderQty,
+		BigDecimal ratingAvg,
+		int ratingCount,
+		int soldQty,
 		ProductStatus status,
 		CategoryDto category,
 		PartyDto supplier,
@@ -26,7 +29,7 @@ public record ProductDto(
 
 	public static ProductDto from(Product p) {
 		return new ProductDto(p.getId(), p.getName(), p.getDescription(), p.getUnit(), p.getPrice(), p.getStockQty(),
-				p.getMinOrderQty(), p.getStatus(), CategoryDto.from(p.getCategory()), PartyDto.from(p.getSupplier()),
+				p.getMinOrderQty(), p.getRatingAvg(), p.getRatingCount(), p.getSoldQty(), p.getStatus(), CategoryDto.from(p.getCategory()), PartyDto.from(p.getSupplier()),
 				MediaDto.firstImage(p.getMedia()), MediaDto.list(p.getMedia()), p.getCreatedAt(), p.getUpdatedAt());
 	}
 

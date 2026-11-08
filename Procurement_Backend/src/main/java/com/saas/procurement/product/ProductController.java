@@ -19,6 +19,8 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.saas.procurement.common.PageResponse;
+import com.saas.procurement.product.ProductService.Highlights;
 import com.saas.procurement.security.AuthUser;
 
 import jakarta.validation.Valid;
@@ -37,6 +39,22 @@ public class ProductController {
 	public List<ProductDto> marketplace(@RequestParam(required = false) String q,
 			@RequestParam(required = false) Long categoryId) {
 		return service.marketplace(q, categoryId);
+	}
+
+	/** Marketplace, one page at a time. page starts at 0. sort: newest, rating, selling, price_asc, price_desc */
+	@PreAuthorize("hasAuthority('MENU_marketplace') or hasRole('ADMIN')")
+	@GetMapping("/products/page")
+	public PageResponse<ProductDto> marketplacePage(@RequestParam(required = false) String q,
+			@RequestParam(required = false) Long categoryId, @RequestParam(required = false) String sort,
+			@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "12") int size) {
+		return service.marketplacePage(q, categoryId, sort, page, size);
+	}
+
+	/** Top rated and top selling products. */
+	@PreAuthorize("hasAuthority('MENU_marketplace') or hasRole('ADMIN')")
+	@GetMapping("/products/highlights")
+	public Highlights highlights() {
+		return service.highlights();
 	}
 
 	@GetMapping("/products/{id}")

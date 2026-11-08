@@ -62,6 +62,17 @@ public class Product extends AuditedEntity {
 	@Column(nullable = false)
 	private ProductStatus status = ProductStatus.ACTIVE;
 
+	/** Average star rating, 0 when there are no reviews. Kept up to date by ReviewService. */
+	@Column(name = "rating_avg", nullable = false, precision = 3, scale = 2)
+	private BigDecimal ratingAvg = BigDecimal.ZERO;
+
+	@Column(name = "rating_count", nullable = false)
+	private int ratingCount;
+
+	/** Units actually received by buyers. Kept up to date by OrderService. */
+	@Column(name = "sold_qty", nullable = false)
+	private int soldQty;
+
 	@OneToMany(mappedBy = "product")
 	private List<MediaFile> media = new ArrayList<>();
 
