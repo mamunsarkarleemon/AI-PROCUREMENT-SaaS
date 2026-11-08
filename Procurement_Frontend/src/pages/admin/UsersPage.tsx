@@ -80,26 +80,26 @@ export function UsersPage() {
         ) : (
           <section className="card">
             <div className="table-wrap">
-              <table className="table">
+              <table className="table table-stack">
                 <thead>
                   <tr><th>User</th><th>Company</th><th>Role</th><th>Status</th><th>Phone</th><th>City</th><th>Joined</th><th className="actions-col">Actions</th></tr>
                 </thead>
                 <tbody>
                   {data?.map((u) => (
                     <tr key={u.id}>
-                      <td>
+                      <td className="stack-full">
                         <div className="cell-product">
                           <Avatar name={u.fullName} size={32} />
                           <span><b>{u.fullName}</b><br /><small className="muted">{u.email}</small></span>
                         </div>
                       </td>
-                      <td>{u.companyName ?? '—'}</td>
-                      <td><Badge value={u.role} /></td>
-                      <td><Badge value={u.status} /></td>
-                      <td>{u.phone ?? '—'}</td>
-                      <td>{u.city ?? '—'}</td>
-                      <td className="nowrap">{formatDate(u.createdAt)}</td>
-                      <td className="actions-col">
+                      <td data-label="Company">{u.companyName ?? '—'}</td>
+                      <td data-label="Role"><Badge value={u.role} /></td>
+                      <td data-label="Status"><Badge value={u.status} /></td>
+                      <td data-label="Phone">{u.phone ?? '—'}</td>
+                      <td data-label="City">{u.city ?? '—'}</td>
+                      <td className="nowrap" data-label="Joined">{formatDate(u.createdAt)}</td>
+                      <td className="actions-col stack-actions">
                         <div className="row-actions">
                           <button className="icon-btn" title="Edit" aria-label={`Edit ${u.fullName}`} onClick={() => setEditing(u)}><Pencil size={16} /></button>
                           {u.id !== me?.id && (

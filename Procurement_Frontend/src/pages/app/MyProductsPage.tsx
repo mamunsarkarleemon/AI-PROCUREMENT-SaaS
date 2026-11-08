@@ -72,7 +72,7 @@ export function MyProductsPage({ admin = false }: { admin?: boolean }) {
               <input className="input-sm" type="search" placeholder="Filter…" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filter products" />
             </div>
             <div className="table-wrap">
-              <table className="table">
+              <table className="table table-stack">
                 <thead>
                   <tr>
                     <th>Product</th>
@@ -89,22 +89,22 @@ export function MyProductsPage({ admin = false }: { admin?: boolean }) {
                 <tbody>
                   {rows.map((p) => (
                     <tr key={p.id}>
-                      <td>
+                      <td className="stack-full">
                         <div className="cell-product">
                           <Thumb src={p.imageUrl} alt={p.name} size="sm" />
                           <Link to={`/app/products/${p.id}`} className="strong">{p.name}</Link>
                         </div>
                       </td>
-                      {admin && <td>{p.supplier.companyName}</td>}
-                      <td>{p.category?.name ?? '—'}</td>
-                      <td className="num">{formatMoney(p.price)} <small className="muted">/{p.unit}</small></td>
-                      <td className="num">
+                      {admin && <td data-label="Supplier">{p.supplier.companyName}</td>}
+                      <td data-label="Category">{p.category?.name ?? '—'}</td>
+                      <td className="num" data-label="Price">{formatMoney(p.price)} <small className="muted">/{p.unit}</small></td>
+                      <td className="num" data-label="Stock">
                         <span className={p.stockQty < p.minOrderQty ? 'text-danger strong' : ''}>{formatNumber(p.stockQty)}</span>
                       </td>
-                      <td className="num">{formatNumber(p.minOrderQty)}</td>
-                      <td><Badge value={p.status} /></td>
-                      <td className="nowrap">{formatDate(p.updatedAt)}</td>
-                      <td className="actions-col">
+                      <td className="num" data-label="MOQ">{formatNumber(p.minOrderQty)}</td>
+                      <td data-label="Status"><Badge value={p.status} /></td>
+                      <td className="nowrap" data-label="Updated">{formatDate(p.updatedAt)}</td>
+                      <td className="actions-col stack-actions">
                         <div className="row-actions">
                           <button className="icon-btn" title="Edit" aria-label={`Edit ${p.name}`} onClick={() => setEditing(p)}><Pencil size={16} /></button>
                           <button className="icon-btn" title={p.status === 'ACTIVE' ? 'Hide' : 'Show'} aria-label={p.status === 'ACTIVE' ? `Hide ${p.name}` : `Show ${p.name}`} onClick={() => toggle(p)}>
