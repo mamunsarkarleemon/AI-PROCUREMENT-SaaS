@@ -1,82 +1,125 @@
-# ProcureAI — AI Procurement SaaS
+# ProcureAI — B2B Procurement Marketplace
 
-A multi-company B2B platform for Qatar SMEs: buyers and suppliers register; the system will support specification extraction, supplier discovery, quote/MOQ comparison, certificate checks, freight and landed cost, RFQs and shipment tracking.
+A web platform for Qatar SMEs. **Buyers** find products, post buying requests, negotiate prices and order.
+**Suppliers** list products (with photos and short videos), send quotes and fulfil orders.
+**Admins** manage users, menus per role, categories and see platform-wide reports.
 
 | Part | Stack | Folder |
 |------|-------|--------|
-| Backend | Java 17, Spring Boot 4.1, Spring Security (JWT resource server), JPA, Flyway | [Procurement_Backend](Procurement_Backend) |
-| Frontend | React 19, TypeScript, Vite, React Router | [Procurement_Frontend](Procurement_Frontend) |
+| Backend | Java 17, Spring Boot 4.1, Spring Security (JWT), JPA, Flyway | [Procurement_Backend](Procurement_Backend) |
+| Frontend | React 19, TypeScript, Vite, React Router, Recharts, Lucide icons | [Procurement_Frontend](Procurement_Frontend) |
 | Database | PostgreSQL 18 | `procurement_db` |
 
-**Status:** user sign-up, login, JWT authentication and role-based access are done. API reference: [docs/API.md](docs/API.md).
+API reference: [docs/API.md](docs/API.md) · Postman: [docs/postman/ProcureAI.postman_collection.json](docs/postman/ProcureAI.postman_collection.json)
 
-## Run it locally
+---
 
-### 1. Database (one time)
+## Run it
 
-Create the database in PostgreSQL (pgAdmin or psql):
+### 1. One-time setup
+- PostgreSQL must have an empty database: `CREATE DATABASE procurement_db;`
+- `Procurement_Backend/config/local.properties` (git-ignored) must contain your DB login and a JWT secret.
+  Copy `config/local.properties.example` if it does not exist.
 
-```sql
-CREATE DATABASE procurement_db;
-```
-
-Tables are created automatically by Flyway when the backend starts (`src/main/resources/db/migration`).
-
-### 2. Backend secrets (one time)
-
-Copy `Procurement_Backend/config/local.properties.example` to `Procurement_Backend/config/local.properties` (git-ignored) and set:
-
-- `spring.datasource.username` / `spring.datasource.password` — your PostgreSQL login
-- `app.jwt.secret` — at least 32 random characters, e.g. the output of `openssl rand -base64 48`
-
-### 3. Start the backend (port 8081)
-
+### 2. Backend → http://localhost:8081
 ```powershell
-cd Procurement_Backend
+cd D:\Procurement_SaaS\Procurement_Backend
 .\mvnw.cmd spring-boot:run
 ```
+On the first start it automatically:
+1. creates all tables (Flyway migration `V1__initial_schema.sql`)
+2. creates the admin account
+3. loads demo data (suppliers, buyers, products, orders…)
 
-Ready when the log says `Started ProcurementApplication`. Check: http://localhost:8081/actuator/health → `{"status":"UP"}`
+Ready when you see `Started ProcurementApplication`.
 
-### 4. Start the frontend (port 5173)
-
+### 3. Frontend → http://localhost:5173
 ```powershell
-cd Procurement_Frontend
-npm install
+cd D:\Procurement_SaaS\Procurement_Frontend
+npm install      # first time only
 npm run dev
 ```
 
-Open http://localhost:5173 → **Create an account** → sign in → dashboard.
-In development, Vite forwards `/api/*` to `http://localhost:8081`.
+### Logins
 
-### 5. Test the API with Postman
+| Role | Email | Password |
+|------|-------|----------|
+| Admin | admin@procureai.com | Admin@123 |
+| Buyer (demo) | buyer1@demo.com · buyer2@demo.com | Demo@123 |
+| Supplier (demo) | supplier1@demo.com · supplier2@demo.com · supplier3@demo.com | Demo@123 |
 
-Import [docs/postman/ProcureAI-Auth.postman_collection.json](docs/postman/ProcureAI-Auth.postman_collection.json). Details in [docs/API.md](docs/API.md).
+Or click **Create account** and register your own Buyer / Supplier.
+The login page has one-click buttons that fill in the demo accounts.
 
-## Tests
+Demo data is only loaded into an empty database. To start with no demo data set `app.seed-demo-data=false` in `application.properties`.
 
-```powershell
-cd Procurement_Backend
-.\mvnw.cmd test          # unit tests always run; integration tests need Docker (Testcontainers) and skip without it
+---
 
-cd ..\Procurement_Frontend
-npm run lint
-npm run build            # includes the TypeScript type-check
+## What each role can do
+
+| | Buyer | Supplier | Admin |
+|---|---|---|---|
+| Dashboard with stats, 30-day chart, recent orders | ✔ | ✔ | ✔ |
+| **Marketplace** – all products + all open buying requests | ✔ | ✔ | — |
+| **Buy now** at the listed price | ✔ | | |
+| **Negotiate** – offer → counter-offer → accept/reject → order | ✔ | ✔ | view |
+| **Post a buying request** (with reference photos) | ✔ | | |
+| **Send quotes** on buying requests (price, qty, delivery days, photos/video) | | ✔ | |
+| Compare quotes and **accept one → order** | ✔ | | |
+| **My products** – add/edit/hide/delete, photos + short video, stock, MOQ | | ✔ | all products |
+| **Orders** – pending → confirmed → shipped → delivered / cancelled | own | own | all |
+| **Reports** by date range, supplier, buyer, product + CSV export | own | own | all + filters |
+| Profile & password | ✔ | ✔ | ✔ |
+| **Users** – create, edit, activate/deactivate, delete | | | ✔ |
+| **Menu access** – choose which menus buyers / suppliers see | | | ✔ |
+| Categories, contact messages | | | ✔ |
+| Notifications (bell icon) | ✔ | ✔ | ✔ |
+
+Order rules: the **supplier** confirms (stock is reduced) and ships; the **buyer** marks it received; either can cancel while pending (supplier also while confirmed — stock is given back).
+
+---
+
+## Database tables
+
+```
+users ─┬─< products ─┬─< media_files            (photos / videos)
+       │             └─< negotiations ─< negotiation_messages
+       ├─< buy_requests ─┬─< quotes ─< media_files
+       │                 └─< media_files
+       ├─< orders           (buyer_id, supplier_id, product_id, quote_id, negotiation_id)
+       └─< notifications
+categories ─< products, buy_requests
+menus ─< role_menu_access   (which role sees which menu)
+contact_messages            (landing page contact form)
 ```
 
-## Security design (blueprint Appendix A–K)
+| Table | What it stores |
+|-------|----------------|
+| `users` | Buyers, suppliers, admins + company details. Password is a BCrypt hash. |
+| `categories` | Product categories (seeded, admin can edit). |
+| `products` | Supplier products: price, unit, stock, MOQ, status. |
+| `media_files` | Uploaded photos/videos, linked to a product, request or quote. Files are in `Procurement_Backend/uploads/`. |
+| `buy_requests` | What a buyer wants to buy: quantity, budget, needed-by date. |
+| `quotes` | A supplier's answer to a buy request. |
+| `negotiations` / `negotiation_messages` | Price bargaining on a product and every offer in it. |
+| `orders` | Orders with price snapshot and status. |
+| `notifications` | Messages under the bell icon. |
+| `menus` / `role_menu_access` | Sidebar menus and which role may use them. |
+| `contact_messages` | Messages from the website's contact form. |
 
-- Passwords: BCrypt via Spring Security `DelegatingPasswordEncoder`; never stored or logged in plain text.
-- Tokens: HS256 JWT, 60-minute lifetime, issued and validated with Spring Security's Nimbus support. Signature, expiry, issuer and audience are all checked.
-- Roles: public sign-up only ever gets platform role `USER` plus `BUYER_OWNER` or `SUPPLIER_OWNER`. `ADMIN` cannot be requested.
-- Authorization: `@PreAuthorize("hasRole('BUYER')")` for role checks. Services take identity from the token, never from request bodies.
-- API: stateless (no session cookie), so CSRF is disabled; CORS allows only `http://localhost:5173` (`CORS_ALLOWED_ORIGINS`).
-- Errors: one JSON format with a `traceId`; no stack traces or SQL leak out.
-- Browser: the access token is kept in `sessionStorage` and cleared on logout, on expiry, or when the tab closes.
+---
 
-## Next steps (roadmap)
+## Security (kept simple on purpose for now)
+- Passwords are stored as **BCrypt hashes**; everything else is plain readable data.
+- Login returns a **JWT token** (valid 12 hours) that the frontend sends as `Authorization: Bearer …`.
+- Every request re-reads the user from the database, so **deactivating a user or changing menu access works immediately**.
+- Roles and menu permissions are checked on the server too, not only hidden in the UI.
 
-1. Email verification and forgot/reset password (Day 12). `users.status` already has `PENDING_VERIFICATION`.
-2. Refresh tokens in an HttpOnly cookie, so the access token can become shorter-lived and stop living in `sessionStorage`.
-3. Rate limiting on login and register.
-4. Company profile APIs and object-level tenant checks (Day 13, Day 22).
+## Tests
+```powershell
+cd Procurement_Backend;  .\mvnw.cmd test      # unit tests (one Docker-based test is skipped without Docker)
+cd Procurement_Frontend; npm run lint; npm run build
+```
+
+## Next ideas
+Email verification & password reset · rate-limiting login · cloud storage for uploads · AI specification extraction · freight & landed-cost estimates · shipment tracking (see the blueprint PDF).

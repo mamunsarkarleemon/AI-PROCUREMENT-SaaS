@@ -1,67 +1,93 @@
-import type { ApiErrorBody } from './types'
+/** Small fetch wrapper: adds the login token, turns errors into ApiError with a readable message. */
 
-/** Empty in development: requests go to /api/... and Vite proxies them to Spring Boot. */
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
+const TOKEN_KEY = 'procureai.token'
 
-/** Thrown for every failed request so pages can show one consistent error UI. */
+export const tokenStore = {
+  get: (): string | null => {
+    try {
+      return localStorage.getItem(TOKEN_KEY)
+    } catch {
+      return null
+    }
+  },
+  set: (token: string) => {
+    try {
+      localStorage.setItem(TOKEN_KEY, token)
+    } catch {
+      /* storage blocked */
+    }
+  },
+  clear: () => {
+    try {
+      localStorage.removeItem(TOKEN_KEY)
+    } catch {
+      /* storage blocked */
+    }
+  },
+}
+
 export class ApiError extends Error {
   readonly status: number
-  readonly code: string
   readonly fieldErrors: Record<string, string>
-  readonly traceId: string | null
 
-  constructor(status: number, code: string, message: string, fieldErrors: Record<string, string> = {}, traceId: string | null = null) {
+  constructor(status: number, message: string, fieldErrors: Record<string, string> = {}) {
     super(message)
-    this.name = 'ApiError'
     this.status = status
-    this.code = code
     this.fieldErrors = fieldErrors
-    this.traceId = traceId
   }
 }
 
-interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
-  body?: unknown
-  token?: string | null
-  signal?: AbortSignal
+/** Called when the server says the token is no longer valid (401). The AuthProvider listens. */
+let onUnauthorized: () => void = () => {}
+export function setUnauthorizedHandler(handler: () => void) {
+  onUnauthorized = handler
 }
 
-export async function apiRequest<T>(path: string, { method = 'GET', body, token, signal }: RequestOptions = {}): Promise<T> {
+type Method = 'GET' | 'POST' | 'PUT' | 'DELETE'
+
+export async function api<T>(method: Method, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' }
-  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  const token = tokenStore.get()
   if (token) headers.Authorization = `Bearer ${token}`
 
-  let response: Response
+  let payload: BodyInit | undefined
+  if (body instanceof FormData) {
+    payload = body // browser sets the multipart Content-Type itself
+  } else if (body !== undefined) {
+    headers['Content-Type'] = 'application/json'
+    payload = JSON.stringify(body)
+  }
+
+  let res: Response
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-      signal,
-    })
-  } catch (err) {
-    if (err instanceof DOMException && err.name === 'AbortError') throw err
-    throw new ApiError(0, 'NETWORK_ERROR', 'Cannot reach the server. Is the backend running?')
+    res = await fetch(`/api/v1${path}`, { method, headers, body: payload })
+  } catch {
+    throw new ApiError(0, 'Cannot reach the server. Is the backend running?')
   }
 
-  if (response.ok) {
-    return (response.status === 204 ? undefined : await response.json()) as T
+  if (res.status === 401 && token && !path.startsWith('/auth/')) {
+    onUnauthorized()
   }
-
-  throw await toApiError(response)
+  if (!res.ok) {
+    let message = `Request failed (${res.status}).`
+    let fieldErrors: Record<string, string> = {}
+    try {
+      const err = await res.json()
+      message = err.message ?? message
+      fieldErrors = err.fieldErrors ?? {}
+    } catch {
+      /* not JSON */
+    }
+    throw new ApiError(res.status, message, fieldErrors)
+  }
+  if (res.status === 204) return undefined as T
+  const text = await res.text()
+  return (text ? JSON.parse(text) : undefined) as T
 }
 
-async function toApiError(response: Response): Promise<ApiError> {
-  try {
-    const body = (await response.json()) as ApiErrorBody
-    // A field can fail several rules; show the first message per field.
-    const fieldErrors: Record<string, string> = {}
-    for (const fe of body.fieldErrors ?? []) {
-      fieldErrors[fe.field] ??= fe.reason
-    }
-    return new ApiError(response.status, body.code, body.message, fieldErrors, body.traceId)
-  } catch {
-    return new ApiError(response.status, 'UNEXPECTED_RESPONSE', `Request failed with status ${response.status}.`)
-  }
+/** Turn any thrown value into a message for the UI. */
+export function errorMessage(err: unknown): string {
+  if (err instanceof ApiError) return err.message
+  if (err instanceof Error) return err.message
+  return 'Something went wrong.'
 }

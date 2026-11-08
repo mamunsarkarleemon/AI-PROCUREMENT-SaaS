@@ -1,133 +1,108 @@
 package com.saas.procurement.auth;
 
-import java.time.Instant;
-import java.util.List;
 import java.util.Locale;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.saas.procurement.auth.dto.LoginRequest;
-import com.saas.procurement.auth.dto.LoginResponse;
-import com.saas.procurement.auth.dto.RegisterRequest;
-import com.saas.procurement.common.error.ApiException;
-import com.saas.procurement.common.error.ErrorCode;
-import com.saas.procurement.company.Company;
-import com.saas.procurement.company.CompanyMember;
-import com.saas.procurement.company.CompanyMemberRepository;
-import com.saas.procurement.company.CompanyRepository;
-import com.saas.procurement.company.CompanyRole;
-import com.saas.procurement.company.CompanyStatus;
-import com.saas.procurement.company.CompanyType;
-import com.saas.procurement.company.MemberStatus;
+import com.saas.procurement.auth.AuthDtos.LoginRequest;
+import com.saas.procurement.auth.AuthDtos.LoginResponse;
+import com.saas.procurement.auth.AuthDtos.PasswordChange;
+import com.saas.procurement.auth.AuthDtos.ProfileUpdate;
+import com.saas.procurement.auth.AuthDtos.RegisterRequest;
+import com.saas.procurement.common.ApiException;
+import com.saas.procurement.notification.NotificationService;
+import com.saas.procurement.security.JwtService;
+import com.saas.procurement.user.Role;
 import com.saas.procurement.user.User;
-import com.saas.procurement.user.UserProfileService;
 import com.saas.procurement.user.UserRepository;
 import com.saas.procurement.user.UserStatus;
-import com.saas.procurement.user.dto.UserResponse;
+import com.saas.procurement.user.dto.UserDto;
+
+import lombok.RequiredArgsConstructor;
 
 @Service
+@RequiredArgsConstructor
 public class AuthService {
 
-	private static final Logger log = LoggerFactory.getLogger(AuthService.class);
-
 	private final UserRepository userRepository;
-	private final CompanyRepository companyRepository;
-	private final CompanyMemberRepository memberRepository;
 	private final PasswordEncoder passwordEncoder;
-	private final JwtTokenService tokenService;
-	private final UserProfileService profileService;
+	private final JwtService jwtService;
+	private final NotificationService notifications;
 
-	/**
-	 * Compared against when the email does not exist, so a login for an unknown email takes about
-	 * as long as one with a wrong password (reduces account enumeration by timing).
-	 */
-	private final String dummyPasswordHash;
-
-	public AuthService(UserRepository userRepository, CompanyRepository companyRepository,
-			CompanyMemberRepository memberRepository, PasswordEncoder passwordEncoder, JwtTokenService tokenService,
-			UserProfileService profileService) {
-		this.userRepository = userRepository;
-		this.companyRepository = companyRepository;
-		this.memberRepository = memberRepository;
-		this.passwordEncoder = passwordEncoder;
-		this.tokenService = tokenService;
-		this.profileService = profileService;
-		this.dummyPasswordHash = passwordEncoder.encode("timing-equalizer-not-a-real-password");
-	}
-
-	/**
-	 * Creates the user, their company and an OWNER membership in one transaction.
-	 * The platform role is always USER; the company role is derived from the account type.
-	 */
 	@Transactional
-	public UserResponse register(RegisterRequest request) {
-		String email = normalizeEmail(request.email());
-		String countryCode = request.countryCode().trim().toUpperCase(Locale.ROOT);
-		String registrationNo = blankToNull(request.registrationNo());
-
+	public UserDto register(RegisterRequest req) {
+		if (req.role() == Role.ADMIN) {
+			throw ApiException.badRequest("You can register as a Buyer or a Supplier.");
+		}
+		String email = normalizeEmail(req.email());
 		if (userRepository.existsByEmail(email)) {
-			throw new ApiException(ErrorCode.EMAIL_ALREADY_REGISTERED);
+			throw ApiException.conflict("An account with this email already exists. Please log in.");
 		}
-		if (registrationNo != null && companyRepository.existsByCountryCodeAndRegistrationNo(countryCode, registrationNo)) {
-			throw new ApiException(ErrorCode.COMPANY_ALREADY_REGISTERED);
+		User u = new User();
+		u.setFullName(req.fullName().trim());
+		u.setEmail(email);
+		u.setPasswordHash(passwordEncoder.encode(req.password()));
+		u.setRole(req.role());
+		u.setStatus(UserStatus.ACTIVE);
+		u.setPhone(req.phone());
+		u.setCompanyName(req.companyName().trim());
+		u.setCity(req.city());
+		u.setCountry(req.country());
+		userRepository.save(u);
+
+		notifications.notifyRole(Role.ADMIN, "New " + u.getRole().name().toLowerCase(Locale.ROOT) + " registered: "
+				+ u.displayName() + " (" + u.getEmail() + ")", "/app/admin/users");
+		return UserDto.from(u);
+	}
+
+	@Transactional(readOnly = true)
+	public LoginResponse login(LoginRequest req) {
+		User u = userRepository.findByEmail(normalizeEmail(req.email())).orElse(null);
+		if (u == null || !passwordEncoder.matches(req.password(), u.getPasswordHash())) {
+			throw new ApiException(HttpStatus.UNAUTHORIZED, "Wrong email or password.");
 		}
+		if (u.getStatus() != UserStatus.ACTIVE) {
+			throw new ApiException(HttpStatus.FORBIDDEN, "Your account is inactive. Please contact the admin.");
+		}
+		return new LoginResponse(jwtService.createToken(u), UserDto.from(u));
+	}
 
-		// Email verification arrives on Day 12; until then accounts are ACTIVE immediately.
-		User user = userRepository.save(new User(email, passwordEncoder.encode(request.password()),
-				request.fullName().trim(), UserStatus.ACTIVE));
-
-		CompanyType type = request.accountType();
-		// Suppliers wait for admin review before they appear in search; buyers can start right away.
-		CompanyStatus companyStatus = type == CompanyType.SUPPLIER ? CompanyStatus.PENDING_REVIEW : CompanyStatus.ACTIVE;
-		Company company = companyRepository.save(
-				new Company(request.companyName().trim(), type, countryCode, registrationNo, companyStatus));
-
-		CompanyMember membership = memberRepository.save(
-				new CompanyMember(company, user, CompanyRole.ownerOf(type), MemberStatus.ACTIVE));
-		// Write the inserts now so DB-generated values (createdAt) are in the response
-		// and constraint violations surface inside this method.
-		memberRepository.flush();
-
-		log.info("Registered user {} as {} of company {}", user.getId(), membership.getRole(), company.getId());
-		return profileService.toResponse(user, List.of(membership));
+	@Transactional(readOnly = true)
+	public UserDto me(Long userId) {
+		return UserDto.from(find(userId));
 	}
 
 	@Transactional
-	public LoginResponse login(LoginRequest request) {
-		String email = normalizeEmail(request.email());
-		User user = userRepository.findByEmail(email).orElse(null);
-
-		if (user == null) {
-			passwordEncoder.matches(request.password(), dummyPasswordHash);
-			throw new ApiException(ErrorCode.INVALID_CREDENTIALS);
-		}
-		if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
-			log.info("Failed login for user {}", user.getId());
-			throw new ApiException(ErrorCode.INVALID_CREDENTIALS);
-		}
-		// Status is only revealed after the correct password, so it cannot be used to probe accounts.
-		if (user.getStatus() != UserStatus.ACTIVE) {
-			throw new ApiException(ErrorCode.ACCOUNT_DISABLED);
-		}
-
-		user.setLastLoginAt(Instant.now());
-		List<CompanyMember> memberships = profileService.activeMemberships(user.getId());
-		JwtTokenService.IssuedToken token = tokenService.issue(user, memberships);
-
-		return new LoginResponse(token.value(), "Bearer", token.expiresInSeconds(),
-				profileService.toResponse(user, memberships));
+	public UserDto updateProfile(Long userId, ProfileUpdate req) {
+		User u = find(userId);
+		u.setFullName(req.fullName().trim());
+		u.setPhone(req.phone());
+		u.setCompanyName(req.companyName());
+		u.setAddress(req.address());
+		u.setCity(req.city());
+		u.setCountry(req.country());
+		u.setAbout(req.about());
+		return UserDto.from(u);
 	}
 
-	static String normalizeEmail(String email) {
+	@Transactional
+	public void changePassword(Long userId, PasswordChange req) {
+		User u = find(userId);
+		if (!passwordEncoder.matches(req.currentPassword(), u.getPasswordHash())) {
+			throw ApiException.badRequest("Current password is wrong.");
+		}
+		u.setPasswordHash(passwordEncoder.encode(req.newPassword()));
+	}
+
+	private User find(Long id) {
+		return userRepository.findById(id).orElseThrow(() -> ApiException.notFound("User"));
+	}
+
+	public static String normalizeEmail(String email) {
 		return email.trim().toLowerCase(Locale.ROOT);
-	}
-
-	private static String blankToNull(String value) {
-		return (value == null || value.isBlank()) ? null : value.trim();
 	}
 
 }

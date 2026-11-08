@@ -9,29 +9,28 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import com.saas.procurement.security.DbUserAuthenticationConverter;
+import com.saas.procurement.security.SecurityErrorHandlers;
+
 /**
- * Stateless JWT security for the REST API (blueprint Appendix E).
- * Authentication = "who are you" (JWT). Authorization = role checks with @PreAuthorize plus
- * company/object checks inside services (Appendix B and F).
+ * Public: landing page data, register, login, uploaded files.
+ * Everything else needs "Authorization: Bearer <token>".
+ * Role / menu checks are on the controllers with @PreAuthorize.
  */
 @Configuration
 @EnableMethodSecurity
 public class SecurityConfig {
 
 	private static final String[] PUBLIC_ENDPOINTS = {
-			"/api/v1/auth/register",
-			"/api/v1/auth/login",
-			"/api/v1/auth/verify-email",
-			"/api/v1/auth/forgot-password",
-			"/api/v1/auth/reset-password",
+			"/api/v1/auth/**",
+			"/api/v1/public/**",
+			"/uploads/**",
 			"/actuator/health",
-			"/actuator/info",
 			"/v3/api-docs/**",
 			"/swagger-ui/**",
 			"/swagger-ui.html",
@@ -39,37 +38,32 @@ public class SecurityConfig {
 	};
 
 	private final SecurityErrorHandlers errorHandlers;
-	private final JwtAuthenticationConverter jwtAuthenticationConverter;
+	private final DbUserAuthenticationConverter authenticationConverter;
 	private final List<String> allowedOrigins;
 
-	public SecurityConfig(SecurityErrorHandlers errorHandlers, JwtAuthenticationConverter jwtAuthenticationConverter,
+	public SecurityConfig(SecurityErrorHandlers errorHandlers, DbUserAuthenticationConverter authenticationConverter,
 			@Value("${app.cors.allowed-origins}") List<String> allowedOrigins) {
 		this.errorHandlers = errorHandlers;
-		this.jwtAuthenticationConverter = jwtAuthenticationConverter;
+		this.authenticationConverter = authenticationConverter;
 		this.allowedOrigins = allowedOrigins;
 	}
 
 	@Bean
 	SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 		http
-				// Stateless bearer-token API: the token is sent in the Authorization header, not a cookie,
-				// so CSRF protection is not needed. Revisit this if cookies are introduced.
-				.csrf(AbstractHttpConfigurer::disable)
+				.csrf(AbstractHttpConfigurer::disable) // token in header, no cookies
 				.cors(cors -> cors.configurationSource(corsConfigurationSource()))
-				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-				// No HTML login page or browser popup - this is a JSON API for the React app.
+				.sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 				.formLogin(AbstractHttpConfigurer::disable)
 				.httpBasic(AbstractHttpConfigurer::disable)
 				.logout(AbstractHttpConfigurer::disable)
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers(PUBLIC_ENDPOINTS).permitAll()
 						.anyRequest().authenticated())
-				// Validate "Authorization: Bearer <jwt>" on every protected request.
 				.oauth2ResourceServer(oauth -> oauth
-						.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter))
+						.jwt(jwt -> jwt.jwtAuthenticationConverter(authenticationConverter))
 						.authenticationEntryPoint(errorHandlers)
 						.accessDeniedHandler(errorHandlers))
-				// JSON 401/403 instead of redirects or empty bodies.
 				.exceptionHandling(ex -> ex
 						.authenticationEntryPoint(errorHandlers)
 						.accessDeniedHandler(errorHandlers));
@@ -79,16 +73,11 @@ public class SecurityConfig {
 	@Bean
 	CorsConfigurationSource corsConfigurationSource() {
 		CorsConfiguration config = new CorsConfiguration();
-		// Explicit allowlist only. Never use "*" together with credentials.
 		config.setAllowedOrigins(allowedOrigins);
 		config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 		config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
-		config.setExposedHeaders(List.of("X-Trace-Id"));
-		config.setAllowCredentials(true);
-		config.setMaxAge(3600L);
-
 		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-		source.registerCorsConfiguration("/api/**", config);
+		source.registerCorsConfiguration("/**", config);
 		return source;
 	}
 

@@ -1,16 +1,16 @@
 import { createContext, useContext } from 'react'
-import type { LoginRequest, User } from '../api/types'
-
-export type AuthStatus = 'loading' | 'authenticated' | 'anonymous'
+import type { MenuItem, User } from '../api/types'
 
 export interface AuthContextValue {
-  status: AuthStatus
+  status: 'loading' | 'authenticated' | 'anonymous'
   user: User | null
-  token: string | null
-  login: (credentials: LoginRequest) => Promise<User>
-  logout: (reason?: string) => void
-  /** Message shown on the login page after an automatic logout (e.g. session expired). */
-  logoutReason: string | null
+  menus: MenuItem[]
+  login: (email: string, password: string) => Promise<User>
+  logout: () => void
+  /** Reload user + menus (after profile edit, or when admin changes menu access). */
+  refresh: () => Promise<void>
+  setUser: (u: User) => void
+  hasMenu: (key: string) => boolean
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null)

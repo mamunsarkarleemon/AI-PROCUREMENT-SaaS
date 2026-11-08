@@ -1,9 +1,0 @@
-import type { ReactNode } from 'react'
-
-export function Alert({ tone, children }: { tone: 'error' | 'success' | 'info' | 'warning'; children: ReactNode }) {
-  return (
-    <div className={`alert alert-${tone}`} role={tone === 'error' ? 'alert' : 'status'}>
-      {children}
-    </div>
-  )
-}

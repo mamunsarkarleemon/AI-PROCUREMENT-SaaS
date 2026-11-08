@@ -1,79 +1,59 @@
 package com.saas.procurement.user;
 
-import java.time.Instant;
-import java.util.UUID;
-
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
+import com.saas.procurement.common.AuditedEntity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import jakarta.persistence.Version;
-import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+/** A buyer, supplier or admin. Company details live on the same row to keep things simple. */
 @Entity
 @Table(name = "users")
 @Getter
 @Setter
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class User {
+@NoArgsConstructor
+public class User extends AuditedEntity {
 
-	@Id
-	@GeneratedValue(strategy = GenerationType.UUID)
-	private UUID id;
-
-	/** Always stored lower-case (also enforced by a DB check constraint). */
-	@Column(nullable = false, unique = true, length = 320)
-	private String email;
-
-	/** Encoded hash only - the raw password is never stored or logged. */
-	@Column(name = "password_hash", nullable = false, length = 100)
-	private String passwordHash;
-
-	@Column(name = "full_name", nullable = false, length = 150)
+	@Column(name = "full_name", nullable = false)
 	private String fullName;
 
-	@Enumerated(EnumType.STRING)
-	@Column(name = "platform_role", nullable = false, length = 30)
-	private PlatformRole platformRole = PlatformRole.USER;
+	@Column(nullable = false, unique = true)
+	private String email;
+
+	/** BCrypt hash. The real password is never stored. */
+	@Column(name = "password_hash", nullable = false)
+	private String passwordHash;
 
 	@Enumerated(EnumType.STRING)
-	@Column(nullable = false, length = 30)
-	private UserStatus status;
-
-	@Column(name = "email_verified_at")
-	private Instant emailVerifiedAt;
-
-	@Column(name = "last_login_at")
-	private Instant lastLoginAt;
-
-	@CreationTimestamp
-	@Column(name = "created_at", nullable = false, updatable = false)
-	private Instant createdAt;
-
-	@UpdateTimestamp
-	@Column(name = "updated_at", nullable = false)
-	private Instant updatedAt;
-
-	@Version
 	@Column(nullable = false)
-	private long version;
+	private Role role;
 
-	public User(String email, String passwordHash, String fullName, UserStatus status) {
-		this.email = email;
-		this.passwordHash = passwordHash;
-		this.fullName = fullName;
-		this.status = status;
-		this.platformRole = PlatformRole.USER;
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false)
+	private UserStatus status = UserStatus.ACTIVE;
+
+	private String phone;
+
+	@Column(name = "company_name")
+	private String companyName;
+
+	private String address;
+
+	private String city;
+
+	private String country;
+
+	@Column(columnDefinition = "TEXT")
+	private String about;
+
+	/** Company name if set, otherwise the person's name. */
+	public String displayName() {
+		return (companyName != null && !companyName.isBlank()) ? companyName : fullName;
 	}
 
 }

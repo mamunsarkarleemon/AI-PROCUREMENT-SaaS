@@ -1,168 +1,137 @@
-# ProcureAI REST API — Authentication
+# ProcureAI REST API
 
-Base URL (local): `http://localhost:8081`
-Interactive docs (Swagger UI, dev only): `http://localhost:8081/swagger-ui.html`
-Postman collection: [postman/ProcureAI-Auth.postman_collection.json](postman/ProcureAI-Auth.postman_collection.json)
+Base URL: `http://localhost:8081/api/v1` · Swagger UI: http://localhost:8081/swagger-ui.html
+Postman collection: [postman/ProcureAI.postman_collection.json](postman/ProcureAI.postman_collection.json)
 
-All request and response bodies are JSON. Protected endpoints need the header:
+**Auth:** call `POST /auth/login`, then send `Authorization: Bearer <token>` on every other request.
+Money is in QAR, sent as numbers (e.g. `85.5`). Dates are `YYYY-MM-DD`.
 
+**Errors** always look like this:
+```json
+{ "timestamp": "2026-11-08T06:30:00Z", "status": 400, "message": "Please check the highlighted fields.",
+  "fieldErrors": { "email": "Enter a valid email" } }
 ```
-Authorization: Bearer <accessToken>
-```
+`401` = not logged in / token expired / user inactive · `403` = your role or menu does not allow this · `404` = not found or not yours · `409` = conflict (e.g. email already used).
 
-## Endpoint summary
-
-| # | Method | Endpoint | Access | Purpose |
-|---|--------|----------|--------|---------|
-| 1 | POST | `/api/v1/auth/register` | Public | Create a user, their company and an owner membership |
-| 2 | POST | `/api/v1/auth/login` | Public | Check credentials, return a JWT access token |
-| 3 | GET | `/api/v1/users/me` | Any signed-in user | The current user and their company memberships |
-| 4 | GET | `/api/v1/buyer/dashboard` | Role `BUYER` | Buyer workspace (placeholder) — 403 for suppliers |
-| 5 | GET | `/api/v1/supplier/dashboard` | Role `SUPPLIER` | Supplier workspace (placeholder) — 403 for buyers |
-| 6 | GET | `/actuator/health` | Public | Health check |
+Access column: **Public** = no login · **Any** = any logged-in user · role names = only that role.
+`[menu]` = the admin must have that menu switched on for the role (Admin → Menu Access).
 
 ---
 
-## 1. Register
+## Public (landing page)
+| Method | Endpoint | Access | Purpose |
+|---|---|---|---|
+| GET | `/public/stats` | Public | Counts of suppliers, buyers, products, open requests, orders |
+| GET | `/public/products?limit=8` | Public | Latest active products |
+| GET | `/public/categories` | Public | All categories |
+| POST | `/public/contact` | Public | Contact form `{name, email, subject, message}` |
 
-`POST /api/v1/auth/register`
+## Auth & profile
+| Method | Endpoint | Access | Purpose |
+|---|---|---|---|
+| POST | `/auth/register` | Public | Create account (role `BUYER` or `SUPPLIER`) |
+| POST | `/auth/login` | Public | `{email, password}` → `{token, user}` |
+| GET | `/me` | Any | My profile |
+| PUT | `/me` | Any | Update profile `{fullName, phone, companyName, address, city, country, about}` |
+| PUT | `/me/password` | Any | `{currentPassword, newPassword}` |
+| GET | `/me/menus` | Any | Sidebar menus allowed for my role |
 
+Register body:
 ```json
-{
-  "fullName": "Aisha Rahman",
-  "email": "aisha@dohafoods.qa",
-  "password": "Secret123",
-  "accountType": "BUYER",
-  "companyName": "Doha Foods LLC",
-  "countryCode": "QA",
-  "registrationNo": "CR-12345"
-}
+{ "fullName": "Aisha Rahman", "email": "aisha@dohafoods.qa", "password": "secret1", "role": "BUYER",
+  "phone": "+974 5555 1234", "companyName": "Doha Foods LLC", "city": "Doha", "country": "Qatar" }
 ```
 
-| Field | Rules |
-|-------|-------|
-| `fullName` | required, max 150 |
-| `email` | required, valid email, max 320. Stored lower-case, unique |
-| `password` | required, 8–72 chars, at least one letter and one digit |
-| `accountType` | `BUYER` or `SUPPLIER` only. Anything else (e.g. `ADMIN`) → 400 |
-| `companyName` | required, max 200 |
-| `countryCode` | required, 2-letter ISO code (e.g. `QA`) |
-| `registrationNo` | optional, max 100. Unique per country |
+## Dashboard & reports
+| Method | Endpoint | Access | Purpose |
+|---|---|---|---|
+| GET | `/dashboard` | Any | Role-specific stat cards, 30-day chart, recent orders |
+| GET | `/reports?from=2026-10-01&to=2026-10-31` | Any `[reports]` | Summary, daily chart, by supplier / buyer / product / status, orders |
+| GET | `/reports?...&supplierId=2&buyerId=5` | Admin | Same, filtered by supplier and/or buyer |
 
-What the server does:
-- Hashes the password with BCrypt (`{bcrypt}$2a$...`). The plain password is never stored.
-- Platform role is always `USER`. Company role is `BUYER_OWNER` or `SUPPLIER_OWNER`.
-- Buyer companies start `ACTIVE`; supplier companies start `PENDING_REVIEW` (admin review comes later).
+## Products
+| Method | Endpoint | Access | Purpose |
+|---|---|---|---|
+| GET | `/products?q=box&categoryId=1` | Buyer/Supplier `[marketplace]`, Admin | Marketplace search |
+| GET | `/products/{id}` | Any | Product details with photos/videos |
+| GET | `/products/mine` | Supplier `[my_products]` | My products |
+| POST | `/products` | Supplier `[my_products]` | Create |
+| PUT | `/products/{id}` | Owner supplier, Admin | Update |
+| PUT | `/products/{id}/status` | Owner supplier, Admin | `{status: "ACTIVE" \| "INACTIVE"}` |
+| DELETE | `/products/{id}` | Owner supplier, Admin | Delete |
+| POST | `/products/{id}/media` | Owner supplier, Admin | Upload files (multipart field **files**, repeat for several) |
+| DELETE | `/media/{id}` | Uploader, Admin | Delete one photo/video |
+| GET | `/admin/products` | Admin | All products incl. hidden |
 
-**201 Created**
-
+Product body:
 ```json
-{
-  "id": "e0541825-49ab-4c5b-8b64-7254341c22f5",
-  "email": "aisha@dohafoods.qa",
-  "fullName": "Aisha Rahman",
-  "platformRole": "USER",
-  "status": "ACTIVE",
-  "emailVerified": false,
-  "createdAt": "2026-11-04T15:01:29.274699Z",
-  "memberships": [
-    {
-      "companyId": "8417ceca-94f7-498b-82fc-22d44491273d",
-      "companyName": "Doha Foods LLC",
-      "companyType": "BUYER",
-      "companyStatus": "ACTIVE",
-      "countryCode": "QA",
-      "role": "BUYER_OWNER"
-    }
-  ]
-}
+{ "name": "Kraft Paper Food Box 750ml", "description": "Grease resistant", "categoryId": 1,
+  "unit": "carton", "price": 85.00, "stockQty": 400, "minOrderQty": 10, "status": "ACTIVE" }
 ```
+Uploads: JPG/PNG/WEBP/GIF up to 5 MB, MP4/WEBM/MOV up to 50 MB. Files are served at `http://localhost:8081/uploads/...`.
 
-Errors: `400 VALIDATION_FAILED`, `400 MALFORMED_REQUEST`, `409 EMAIL_ALREADY_REGISTERED`, `409 COMPANY_ALREADY_REGISTERED`.
+## Buying requests & quotes
+| Method | Endpoint | Access | Purpose |
+|---|---|---|---|
+| GET | `/requests?q=&categoryId=` | Buyer/Supplier `[marketplace]`, Admin | Open requests |
+| GET | `/requests/mine` | Buyer `[my_requests]` | My requests (with quote counts) |
+| GET | `/requests/{id}` | Any | Details. Owner/admin see all quotes; a supplier sees only its own |
+| POST | `/requests` | Buyer `[my_requests]` | Post a request (all suppliers are notified) |
+| PUT | `/requests/{id}` | Owner buyer, Admin | Edit (while open) |
+| POST | `/requests/{id}/close` | Owner buyer, Admin | Close |
+| DELETE | `/requests/{id}` | Owner buyer, Admin | Delete with its quotes |
+| POST | `/requests/{id}/media` | Owner buyer | Reference photos (multipart **files**) |
+| GET | `/admin/requests` | Admin | All requests |
+| POST | `/requests/{id}/quotes` | Supplier | Send or update my quote |
+| GET | `/quotes/mine` | Supplier `[my_quotes]` | My quotes |
+| POST | `/quotes/{id}/media` | Quote owner | Photos/video for the quote |
+| POST | `/quotes/{id}/accept` | Request owner | Accept → **creates an order**, closes request, declines other quotes |
+| POST | `/quotes/{id}/reject` | Request owner | Decline |
+| POST | `/quotes/{id}/withdraw` | Quote owner | Withdraw (while pending) |
 
-## 2. Login
+Request body: `{ "title", "description", "categoryId", "quantity", "unit", "targetPrice", "neededBy": "2026-12-01", "deliveryCity" }`
+Quote body: `{ "pricePerUnit": 44.0, "quantity": 200, "deliveryDays": 14, "productId": null, "message": "..." }`
 
-`POST /api/v1/auth/login`
+## Negotiations
+| Method | Endpoint | Access | Purpose |
+|---|---|---|---|
+| GET | `/negotiations` | Buyer/Supplier `[negotiations]`, Admin | My negotiations (admin: all) |
+| GET | `/negotiations/{id}` | Party, Admin | With full message history |
+| POST | `/negotiations` | Buyer `[negotiations]` | First offer `{productId, quantity, pricePerUnit, message}` |
+| POST | `/negotiations/{id}/counter` | The side whose turn it is | `{quantity, pricePerUnit, message}` |
+| POST | `/negotiations/{id}/accept` | The side whose turn it is | Accept → **creates an order** at the agreed price |
+| POST | `/negotiations/{id}/reject` | Either side | End the negotiation |
 
-```json
-{ "email": "aisha@dohafoods.qa", "password": "Secret123" }
-```
+The response has `myTurn: true` when you must answer.
 
-**200 OK**
+## Orders
+| Method | Endpoint | Access | Purpose |
+|---|---|---|---|
+| GET | `/orders?status=PENDING` | Any `[orders]` | Buyer: mine · Supplier: received · Admin: all |
+| GET | `/orders/{id}` | Buyer, supplier of the order, Admin | Details. `nextStatuses` = what you may change it to |
+| POST | `/orders` | Buyer | Buy now `{productId, quantity, note}` (checks MOQ and stock) |
+| PUT | `/orders/{id}/status` | See rules | `{status}` |
 
-```json
-{
-  "accessToken": "eyJhbGciOiJIUzI1NiJ9....",
-  "tokenType": "Bearer",
-  "expiresIn": 3600,
-  "user": { "...": "same shape as the register response" }
-}
-```
+Status rules: Supplier `PENDING→CONFIRMED` (stock reduced), `CONFIRMED→SHIPPED`, `PENDING/CONFIRMED→CANCELLED` (stock returned) · Buyer `PENDING→CANCELLED`, `SHIPPED→DELIVERED` · Admin: any.
 
-The token is valid for 60 minutes. Its payload looks like this:
+## Notifications
+| Method | Endpoint | Access | Purpose |
+|---|---|---|---|
+| GET | `/notifications` | Any | `{unread, items[]}` latest 30 |
+| POST | `/notifications/{id}/read` | Any | Mark one read |
+| POST | `/notifications/read-all` | Any | Mark all read |
 
-```json
-{
-  "sub": "e0541825-49ab-4c5b-8b64-7254341c22f5",
-  "email": "aisha@dohafoods.qa",
-  "roles": ["USER", "BUYER", "BUYER_OWNER"],
-  "iss": "procurement-saas",
-  "aud": "procurement-api",
-  "iat": 1793804490,
-  "exp": 1793808090,
-  "jti": "6c882304-5e82-4035-b758-6f7499d22348"
-}
-```
+## Admin
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/admin/users?role=SUPPLIER&status=ACTIVE&q=doha` | List / search users |
+| POST | `/admin/users` | Create user (any role) |
+| PUT | `/admin/users/{id}` | Update (empty `password` keeps the old one) |
+| PUT | `/admin/users/{id}/status` | `{status: "ACTIVE" \| "INACTIVE"}` — inactive users are logged out at once |
+| DELETE | `/admin/users/{id}` | Delete (409 if the user has orders → deactivate instead) |
+| GET | `/admin/menu-access` | Menu × role matrix |
+| PUT | `/admin/menu-access/{menuKey}/{BUYER\|SUPPLIER}` | `{enabled: true \| false}` |
+| POST / PUT / DELETE | `/admin/categories[/{id}]` | `{name}` |
+| GET / DELETE | `/admin/messages[/{id}]` | Contact-form messages |
 
-Errors: `401 INVALID_CREDENTIALS` (same response for an unknown email and a wrong password), `403 ACCOUNT_DISABLED`.
-
-## 3. Current user
-
-`GET /api/v1/users/me` with `Authorization: Bearer <token>` → **200** with the user object.
-The user id always comes from the verified token, never from the request.
-
-Errors: `401 UNAUTHORIZED` (no token), `401 INVALID_TOKEN` (expired, tampered, wrong issuer or audience).
-
-## 4–5. Role-protected dashboards
-
-`GET /api/v1/buyer/dashboard` → `{"area":"BUYER","message":"Welcome to the buyer workspace."}`
-`GET /api/v1/supplier/dashboard` → the same shape for suppliers.
-Calling the other role's endpoint returns `403 FORBIDDEN`.
-
----
-
-## Error format (every error)
-
-```json
-{
-  "timestamp": "2026-11-04T15:01:29.826Z",
-  "status": 400,
-  "code": "VALIDATION_FAILED",
-  "message": "One or more fields are invalid.",
-  "fieldErrors": [
-    { "field": "password", "reason": "must contain at least one letter and one digit" }
-  ],
-  "traceId": "ea7d217c-f06b-466e-b19b-44ae0f35b03f"
-}
-```
-
-`traceId` is also sent in the `X-Trace-Id` response header and written to the server logs, so you can find the log lines for any failed request.
-
-| Code | HTTP | Meaning |
-|------|------|---------|
-| `VALIDATION_FAILED` | 400 | A field broke a rule; see `fieldErrors` |
-| `MALFORMED_REQUEST` | 400 | Invalid JSON or an unknown enum value |
-| `UNAUTHORIZED` | 401 | No token |
-| `INVALID_TOKEN` | 401 | Token expired, tampered with, or not issued by this server |
-| `INVALID_CREDENTIALS` | 401 | Wrong email or password |
-| `ACCOUNT_DISABLED` | 403 | Correct password, but the account is not active |
-| `FORBIDDEN` | 403 | Signed in, but the role is not allowed |
-| `EMAIL_ALREADY_REGISTERED` | 409 | Email already in use |
-| `COMPANY_ALREADY_REGISTERED` | 409 | Registration number already used in that country |
-
-## Testing with Postman
-
-1. Import `docs/postman/ProcureAI-Auth.postman_collection.json`.
-2. Run **1. Register - Buyer**, then **2. Login (saves token)**.
-3. Run **3**, **4** and **5**. The token is attached automatically (collection-level Bearer auth).
-4. To register a second user, change the `email` collection variable first.
+Menu keys: `dashboard`, `marketplace`, `my_products`, `my_requests`, `my_quotes`, `negotiations`, `orders`, `reports`, `profile` (dashboard and profile are always on).
