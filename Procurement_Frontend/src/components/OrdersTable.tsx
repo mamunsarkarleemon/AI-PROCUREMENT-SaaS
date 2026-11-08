@@ -37,7 +37,11 @@ export function OrdersTable({ orders, viewer }: { orders: Order[]; viewer: Role 
               </td>
               {viewer !== 'SUPPLIER' && <td data-label="Supplier">{o.supplier.companyName}</td>}
               {viewer !== 'BUYER' && <td data-label="Buyer">{o.buyer.companyName}</td>}
-              <td className="num" data-label="Qty">{formatNumber(o.quantity)} {o.unit}</td>
+              <td className="num" data-label="Qty">
+                {o.returnedQty > 0
+                  ? <>{formatNumber(o.receivedQty ?? 0)} of {formatNumber(o.quantity)} {o.unit}<br /><small className="text-danger">{formatNumber(o.returnedQty)} returned</small></>
+                  : <>{formatNumber(o.quantity)} {o.unit}</>}
+              </td>
               <td className="num strong" data-label="Total">{formatMoney(o.totalAmount)}</td>
               <td className="stack-status"><Badge value={o.status} /></td>
               <td className="nowrap" data-label="Date">{formatDate(o.createdAt)}</td>

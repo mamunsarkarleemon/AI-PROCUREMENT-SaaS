@@ -5,10 +5,12 @@ import { ApiError, errorMessage } from '../../api/client'
 import { publicApi, requestApi } from '../../api/endpoints'
 import type { BuyRequest, BuyRequestForm, Category } from '../../api/types'
 import { MediaPicker } from '../../components/Media'
+import { Pagination } from '../../components/Pagination'
 import { Alert, AsyncBlock, Badge, EmptyState, Modal, PageHeader, SelectField, TextArea, TextField, Thumb } from '../../components/ui'
 import { UNITS } from '../../lib/constants'
 import { formatDate, formatMoney, formatNumber, timeAgo } from '../../lib/format'
 import { useApi } from '../../lib/useApi'
+import { usePagination } from '../../lib/usePagination'
 
 /** Buyer: my buying requests. Admin: all requests (admin=true). */
 export function MyRequestsPage({ admin = false }: { admin?: boolean }) {
@@ -16,6 +18,7 @@ export function MyRequestsPage({ admin = false }: { admin?: boolean }) {
   const { data, loading, error, reload } = useApi(() => (admin ? requestApi.all() : requestApi.mine()), [admin])
   const [picked, setPicked] = useState<BuyRequest | 'new' | null>(null)
   const [message, setMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null)
+  const paging = usePagination(data ?? [], 8)
 
   // /app/my-requests?new=1 opens the form directly (e.g. from the dashboard button).
   const editing = picked ?? (params.get('new') ? 'new' : null)
@@ -60,7 +63,7 @@ export function MyRequestsPage({ admin = false }: { admin?: boolean }) {
             action={!admin && <button className="btn btn-primary" onClick={() => setEditing('new')}><Plus size={16} /> Post a request</button>} />
         ) : (
           <div className="request-list">
-            {data?.map((r) => (
+            {paging.pageItems.map((r) => (
               <div className="request-card card" key={r.id}>
                 <Thumb src={r.imageUrl} alt={r.title} size="sm" />
                 <div className="grow">
@@ -87,6 +90,7 @@ export function MyRequestsPage({ admin = false }: { admin?: boolean }) {
                 </div>
               </div>
             ))}
+            <Pagination {...paging.props} />
           </div>
         )}
       </AsyncBlock>

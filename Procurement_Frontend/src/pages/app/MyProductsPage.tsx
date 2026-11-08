@@ -5,10 +5,12 @@ import { ApiError, errorMessage } from '../../api/client'
 import { mediaApi, productApi, publicApi } from '../../api/endpoints'
 import type { Category, Media, Product, ProductForm } from '../../api/types'
 import { MediaList, MediaPicker } from '../../components/Media'
+import { Pagination } from '../../components/Pagination'
 import { Alert, AsyncBlock, Badge, EmptyState, Modal, PageHeader, SelectField, TextArea, TextField, Thumb } from '../../components/ui'
 import { UNITS } from '../../lib/constants'
 import { formatDate, formatMoney, formatNumber } from '../../lib/format'
 import { useApi } from '../../lib/useApi'
+import { usePagination } from '../../lib/usePagination'
 
 /** Supplier: add, edit, hide and delete products. Also used by admin for "All Products" (admin=true). */
 export function MyProductsPage({ admin = false }: { admin?: boolean }) {
@@ -52,6 +54,7 @@ export function MyProductsPage({ admin = false }: { admin?: boolean }) {
 
   const rows = (data ?? []).filter((p) =>
     !filter || `${p.name} ${p.supplier.companyName} ${p.category?.name ?? ''}`.toLowerCase().includes(filter.toLowerCase()))
+  const paging = usePagination(rows, 10, filter)
 
   return (
     <>
@@ -87,7 +90,7 @@ export function MyProductsPage({ admin = false }: { admin?: boolean }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((p) => (
+                  {paging.pageItems.map((p) => (
                     <tr key={p.id}>
                       <td className="stack-full">
                         <div className="cell-product">
@@ -118,6 +121,7 @@ export function MyProductsPage({ admin = false }: { admin?: boolean }) {
                 </tbody>
               </table>
             </div>
+            <Pagination {...paging.props} />
           </section>
         )}
       </AsyncBlock>

@@ -11,13 +11,17 @@ import type {
   NotificationItem,
   Order,
   OrderStatus,
+  PageResult,
   Product,
   ProductForm,
+  ProductHighlights,
   ProductStatus,
   PublicStats,
   Quote,
   QuoteForm,
+  ReactionType,
   Report,
+  ReviewList,
   Role,
   User,
   UserForm,
@@ -77,6 +81,9 @@ export const dashboardApi = {
 
 export const productApi = {
   marketplace: (q = '', categoryId: number | null = null) => api<Product[]>('GET', `/products${qs({ q, categoryId })}`),
+  page: (p: { q?: string; categoryId?: number | null; sort?: string; page: number; size: number }) =>
+    api<PageResult<Product>>('GET', `/products/page${qs(p)}`),
+  highlights: () => api<ProductHighlights>('GET', '/products/highlights'),
   get: (id: number) => api<Product>('GET', `/products/${id}`),
   mine: () => api<Product[]>('GET', '/products/mine'),
   all: () => api<Product[]>('GET', '/admin/products'),
@@ -129,6 +136,17 @@ export const orderApi = {
   buyNow: (productId: number, quantity: number, note: string) =>
     api<Order>('POST', '/orders', { productId, quantity, note }),
   setStatus: (id: number, status: OrderStatus) => api<Order>('PUT', `/orders/${id}/status`, { status }),
+  receive: (id: number, receivedQty: number, reason: string) =>
+    api<Order>('POST', `/orders/${id}/receive`, { receivedQty, reason }),
+  confirmReturn: (id: number) => api<Order>('POST', `/orders/${id}/return/confirm`),
+}
+
+export const reviewApi = {
+  list: (productId: number) => api<ReviewList>('GET', `/products/${productId}/reviews`),
+  save: (productId: number, rating: number, comment: string) =>
+    api<ReviewList>('POST', `/products/${productId}/reviews`, { rating, comment }),
+  remove: (id: number) => api<ReviewList>('DELETE', `/reviews/${id}`),
+  react: (id: number, reaction: ReactionType | null) => api<ReviewList>('PUT', `/reviews/${id}/reaction`, { reaction }),
 }
 
 export const notificationApi = {

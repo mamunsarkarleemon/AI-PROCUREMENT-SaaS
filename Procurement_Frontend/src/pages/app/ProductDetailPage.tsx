@@ -6,6 +6,9 @@ import { negotiationApi, orderApi, productApi } from '../../api/endpoints'
 import type { Product } from '../../api/types'
 import { useAuth } from '../../auth/AuthContext'
 import { MediaGallery } from '../../components/Media'
+import { StockBadge } from '../../components/ProductCard'
+import { RatingLine } from '../../components/Rating'
+import { ReviewsSection } from '../../components/Reviews'
 import { Alert, AsyncBlock, Avatar, Badge, Modal, TextArea, TextField } from '../../components/ui'
 import { formatMoney, formatNumber } from '../../lib/format'
 import { useApi } from '../../lib/useApi'
@@ -13,7 +16,7 @@ import { useApi } from '../../lib/useApi'
 export function ProductDetailPage() {
   const id = Number(useParams().id)
   const { user, hasMenu } = useAuth()
-  const { data: p, loading, error } = useApi(() => productApi.get(id), [id])
+  const { data: p, setData, loading, error } = useApi(() => productApi.get(id), [id])
   const [dialog, setDialog] = useState<'buy' | 'negotiate' | null>(null)
   const isOwner = p && user && p.supplier.id === user.id
 
@@ -30,11 +33,14 @@ export function ProductDetailPage() {
               <div className="card">
                 {p.category && <span className="product-cat">{p.category.name}</span>}
                 <h1 className="detail-title">{p.name}</h1>
+                <a href="#reviews" className="detail-rating"><RatingLine value={p.ratingAvg} count={p.ratingCount} /></a>
                 {p.status !== 'ACTIVE' && <Badge value={p.status} label="Hidden from marketplace" />}
                 <p className="detail-price">{formatMoney(p.price)} <small>per {p.unit}</small></p>
                 <dl className="facts">
                   <div><dt>In stock</dt><dd>{formatNumber(p.stockQty)} {p.unit}</dd></div>
                   <div><dt>Minimum order</dt><dd>{formatNumber(p.minOrderQty)} {p.unit}</dd></div>
+                  <div><dt>Availability</dt><dd><StockBadge product={p} /></dd></div>
+                  <div><dt>Sold</dt><dd>{formatNumber(p.soldQty)} {p.unit}</dd></div>
                 </dl>
                 {p.description && <p className="pre-line">{p.description}</p>}
 
@@ -77,6 +83,7 @@ export function ProductDetailPage() {
           </div>
         )}
       </AsyncBlock>
+      {p && <ReviewsSection productId={p.id} onSummary={(ratingAvg, ratingCount) => setData({ ...p, ratingAvg, ratingCount })} />}
       {p && dialog === 'buy' && <BuyNowDialog product={p} onClose={() => setDialog(null)} />}
       {p && dialog === 'negotiate' && <NegotiateDialog product={p} onClose={() => setDialog(null)} />}
     </>

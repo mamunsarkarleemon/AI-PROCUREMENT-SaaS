@@ -4,9 +4,11 @@ import { ApiError, errorMessage } from '../../api/client'
 import { adminApi } from '../../api/endpoints'
 import type { Role, User, UserForm, UserStatus } from '../../api/types'
 import { useAuth } from '../../auth/AuthContext'
+import { Pagination } from '../../components/Pagination'
 import { Alert, AsyncBlock, Avatar, Badge, EmptyState, Modal, PageHeader, PasswordField, SelectField, TextArea, TextField } from '../../components/ui'
 import { formatDate } from '../../lib/format'
 import { useApi } from '../../lib/useApi'
+import { usePagination } from '../../lib/usePagination'
 
 export function UsersPage() {
   const { user: me } = useAuth()
@@ -23,6 +25,7 @@ export function UsersPage() {
   }, [q])
 
   const { data, loading, error, reload } = useApi(() => adminApi.users({ role, status, q: search }), [role, status, search])
+  const paging = usePagination(data ?? [], 10, `${role}|${status}|${search}`)
 
   async function toggle(u: User) {
     const next = u.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
@@ -85,7 +88,7 @@ export function UsersPage() {
                   <tr><th>User</th><th>Company</th><th>Role</th><th>Status</th><th>Phone</th><th>City</th><th>Joined</th><th className="actions-col">Actions</th></tr>
                 </thead>
                 <tbody>
-                  {data?.map((u) => (
+                  {paging.pageItems.map((u) => (
                     <tr key={u.id}>
                       <td className="stack-full">
                         <div className="cell-product">
@@ -117,6 +120,7 @@ export function UsersPage() {
                 </tbody>
               </table>
             </div>
+            <Pagination {...paging.props} />
           </section>
         )}
       </AsyncBlock>

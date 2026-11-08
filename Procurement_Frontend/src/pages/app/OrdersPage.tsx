@@ -1,28 +1,36 @@
 import { useState } from 'react'
 import { ShoppingCart } from 'lucide-react'
 import { orderApi } from '../../api/endpoints'
-import type { OrderStatus } from '../../api/types'
+import type { Order, OrderStatus } from '../../api/types'
 import { useAuth } from '../../auth/AuthContext'
 import { OrdersTable } from '../../components/OrdersTable'
+import { Pagination } from '../../components/Pagination'
 import { AsyncBlock, EmptyState, PageHeader } from '../../components/ui'
 import { formatMoney } from '../../lib/format'
 import { useApi } from '../../lib/useApi'
+import { usePagination } from '../../lib/usePagination'
 
-const FILTERS: { value: OrderStatus | ''; label: string }[] = [
+type Filter = OrderStatus | '' | 'RETURNS'
+
+const matches = (o: Order, f: Filter) => (f === 'RETURNS' ? o.returnStatus === 'PENDING' : !f || o.status === f)
+
+const FILTERS: { value: Filter; label: string }[] = [
   { value: '', label: 'All' },
   { value: 'PENDING', label: 'Pending' },
   { value: 'CONFIRMED', label: 'Confirmed' },
   { value: 'SHIPPED', label: 'Shipped' },
   { value: 'DELIVERED', label: 'Delivered' },
   { value: 'CANCELLED', label: 'Cancelled' },
+  { value: 'RETURNS', label: 'Returns pending' },
 ]
 
 export function OrdersPage() {
   const { user } = useAuth()
   const { data, loading, error } = useApi(() => orderApi.list(), [])
-  const [status, setStatus] = useState<OrderStatus | ''>('')
+  const [status, setStatus] = useState<Filter>('')
+  const rows = (data ?? []).filter((o) => matches(o, status))
+  const paging = usePagination(rows, 10, status)
   if (!user) return null
-  const rows = (data ?? []).filter((o) => !status || o.status === status)
   const total = rows.filter((o) => o.status !== 'CANCELLED').reduce((s, o) => s + o.totalAmount, 0)
 
   return (
@@ -33,7 +41,7 @@ export function OrdersPage() {
       />
       <div className="tabs" role="tablist">
         {FILTERS.map((f) => {
-          const count = (data ?? []).filter((o) => !f.value || o.status === f.value).length
+          const count = (data ?? []).filter((o) => matches(o, f.value)).length
           return (
             <button key={f.label} role="tab" aria-selected={status === f.value} className={`tab${status === f.value ? ' active' : ''}`} onClick={() => setStatus(f.value)}>
               {f.label} <span className="tab-count">{count}</span>
@@ -50,7 +58,8 @@ export function OrdersPage() {
               <h2>{rows.length} order{rows.length === 1 ? '' : 's'}</h2>
               <span className="muted">Value (excl. cancelled): <b>{formatMoney(total)}</b></span>
             </div>
-            <OrdersTable orders={rows} viewer={user.role} />
+            <OrdersTable orders={paging.pageItems} viewer={user.role} />
+            <Pagination {...paging.props} />
           </section>
         )}
       </AsyncBlock>

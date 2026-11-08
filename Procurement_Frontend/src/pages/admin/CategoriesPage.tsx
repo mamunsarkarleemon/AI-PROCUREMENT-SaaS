@@ -5,9 +5,12 @@ import { adminApi, publicApi } from '../../api/endpoints'
 import type { Category } from '../../api/types'
 import { Alert, AsyncBlock, PageHeader } from '../../components/ui'
 import { useApi } from '../../lib/useApi'
+import { usePagination } from '../../lib/usePagination'
+import { Pagination } from '../../components/Pagination'
 
 export function CategoriesPage() {
   const { data, loading, error, reload } = useApi(() => publicApi.categories(), [])
+  const paging = usePagination(data ?? [], 15)
   const [name, setName] = useState('')
   const [editId, setEditId] = useState<number | null>(null)
   const [editName, setEditName] = useState('')
@@ -45,7 +48,7 @@ export function CategoriesPage() {
         </form>
         <AsyncBlock loading={loading} error={error}>
           <ul className="simple-list">
-            {data?.map((c) => (
+            {paging.pageItems.map((c) => (
               <li key={c.id}>
                 {editId === c.id ? (
                   <form className="inline-form grow" onSubmit={(e) => { e.preventDefault(); act(() => adminApi.renameCategory(c.id, editName), 'Category renamed.').then(() => setEditId(null)) }}>
@@ -63,6 +66,7 @@ export function CategoriesPage() {
               </li>
             ))}
           </ul>
+          <Pagination {...paging.props} scrollToTop={false} />
         </AsyncBlock>
       </section>
     </>

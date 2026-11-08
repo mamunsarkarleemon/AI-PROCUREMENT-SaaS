@@ -3,20 +3,22 @@ import { useNavigate } from 'react-router'
 import { Handshake } from 'lucide-react'
 import { negotiationApi } from '../../api/endpoints'
 import { useAuth } from '../../auth/AuthContext'
+import { Pagination } from '../../components/Pagination'
 import { AsyncBlock, Badge, EmptyState, PageHeader, Thumb } from '../../components/ui'
 import { formatMoney, formatNumber, timeAgo } from '../../lib/format'
 import { useApi } from '../../lib/useApi'
+import { usePagination } from '../../lib/usePagination'
 
 export function NegotiationsPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const { data, loading, error } = useApi(() => negotiationApi.list(), [])
   const [filter, setFilter] = useState<'all' | 'turn' | 'open' | 'closed'>('all')
-  if (!user) return null
-
   const rows = (data ?? []).filter((n) =>
     filter === 'all' ? true : filter === 'turn' ? n.myTurn : filter === 'open' ? n.status === 'OPEN' : n.status !== 'OPEN')
   const myTurnCount = (data ?? []).filter((n) => n.myTurn).length
+  const paging = usePagination(rows, 10, filter)
+  if (!user) return null
 
   return (
     <>
@@ -32,7 +34,7 @@ export function NegotiationsPage() {
         ) : (
           <section className="card">
             <ul className="neg-list">
-              {rows.map((n) => {
+              {paging.pageItems.map((n) => {
                 const other = user.role === 'BUYER' ? n.supplier : n.buyer
                 return (
                   <li key={n.id}>
@@ -52,6 +54,7 @@ export function NegotiationsPage() {
                 )
               })}
             </ul>
+            <Pagination {...paging.props} />
           </section>
         )}
       </AsyncBlock>

@@ -8,6 +8,38 @@ export type QuoteStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'WITHDRAWN'
 export type NegotiationStatus = 'OPEN' | 'ACCEPTED' | 'REJECTED'
 export type OrderStatus = 'PENDING' | 'CONFIRMED' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED'
 export type OrderSource = 'DIRECT' | 'NEGOTIATION' | 'QUOTE'
+export type ReturnStatus = 'NONE' | 'PENDING' | 'CONFIRMED'
+export type ReactionType = 'LIKE' | 'LOVE' | 'HELPFUL' | 'DISLIKE'
+
+/** One page of a list. page starts at 0. */
+export interface PageResult<T> {
+  items: T[]
+  page: number
+  size: number
+  totalItems: number
+  totalPages: number
+}
+
+export interface Review {
+  id: number
+  rating: number
+  comment: string | null
+  reviewerName: string
+  mine: boolean
+  reactions: Record<ReactionType, number>
+  myReaction: ReactionType | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ReviewList {
+  average: number
+  count: number
+  breakdown: Record<number, number>
+  canReview: boolean
+  myReview: Review | null
+  items: Review[]
+}
 
 export interface User {
   id: number
@@ -61,6 +93,9 @@ export interface Product {
   price: number
   stockQty: number
   minOrderQty: number
+  ratingAvg: number
+  ratingCount: number
+  soldQty: number
   status: ProductStatus
   category: Category | null
   supplier: Party
@@ -68,6 +103,11 @@ export interface Product {
   media: Media[]
   createdAt: string
   updatedAt: string
+}
+
+export interface ProductHighlights {
+  topRated: Product[]
+  topSelling: Product[]
 }
 
 export interface ProductForm {
@@ -185,7 +225,15 @@ export interface Order {
   unit: string
   quantity: number
   unitPrice: number
+  /** What the buyer pays. After a partial delivery this covers only the received units. */
   totalAmount: number
+  orderedAmount: number
+  receivedQty: number | null
+  returnedQty: number
+  returnReason: string | null
+  returnStatus: ReturnStatus
+  returnConfirmedAt: string | null
+  canConfirmReturn: boolean
   note: string | null
   buyer: Party
   supplier: Party

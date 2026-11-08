@@ -1,12 +1,15 @@
 import { Mail, Trash2 } from 'lucide-react'
 import { adminApi } from '../../api/endpoints'
+import { Pagination } from '../../components/Pagination'
 import { AsyncBlock, EmptyState, PageHeader } from '../../components/ui'
 import { formatDateTime } from '../../lib/format'
 import { useApi } from '../../lib/useApi'
+import { usePagination } from '../../lib/usePagination'
 
 /** Messages sent from the landing page contact form. */
 export function MessagesPage() {
   const { data, loading, error, reload } = useApi(() => adminApi.messages(), [])
+  const paging = usePagination(data ?? [], 8)
 
   async function remove(id: number) {
     if (!window.confirm('Delete this message?')) return
@@ -22,7 +25,7 @@ export function MessagesPage() {
           <EmptyState icon={<Mail size={32} />} title="No messages yet" />
         ) : (
           <div className="message-list">
-            {data?.map((m) => (
+            {paging.pageItems.map((m) => (
               <article className="card" key={m.id}>
                 <div className="card-head">
                   <div>
@@ -37,6 +40,7 @@ export function MessagesPage() {
                 <p className="pre-line">{m.message}</p>
               </article>
             ))}
+            <Pagination {...paging.props} />
           </div>
         )}
       </AsyncBlock>

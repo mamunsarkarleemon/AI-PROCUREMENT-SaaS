@@ -5,9 +5,11 @@ import type { Report, User } from '../../api/types'
 import { useAuth } from '../../auth/AuthContext'
 import { AmountChart, BarList, StatCard } from '../../components/Charts'
 import { OrdersTable } from '../../components/OrdersTable'
+import { Pagination } from '../../components/Pagination'
 import { AsyncBlock, Badge, EmptyState } from '../../components/ui'
 import { formatDate, formatMoney, formatNumber, isoDate } from '../../lib/format'
 import { useApi } from '../../lib/useApi'
+import { usePagination } from '../../lib/usePagination'
 
 const PRESETS = [
   { label: 'Last 7 days', days: 7 },
@@ -28,6 +30,7 @@ export function ReportsPage() {
   const { data: r, loading, error } = useApi(() => dashboardApi.report({ from, to, supplierId, buyerId }), [from, to, supplierId, buyerId])
   const { data: suppliers } = useApi<User[]>(() => (isAdmin ? adminApi.users({ role: 'SUPPLIER' }) : Promise.resolve([])), [isAdmin])
   const { data: buyers } = useApi<User[]>(() => (isAdmin ? adminApi.users({ role: 'BUYER' }) : Promise.resolve([])), [isAdmin])
+  const orderPages = usePagination(r?.orders ?? [], 10, `${from}|${to}|${supplierId}|${buyerId}`)
   if (!user) return null
 
   function preset(days: number) {
@@ -129,7 +132,16 @@ export function ReportsPage() {
 
             <section className="card">
               <h2 className="card-title">Orders in this period ({r.orders.length})</h2>
-              {r.orders.length === 0 ? <EmptyState title="No orders in this period" /> : <OrdersTable orders={r.orders} viewer={user.role} />}
+              {r.orders.length === 0 ? <EmptyState title="No orders in this period" /> : (
+                <>
+                  <div className="no-print">
+                    <OrdersTable orders={orderPages.pageItems} viewer={user.role} />
+                    <Pagination {...orderPages.props} scrollToTop={false} />
+                  </div>
+                  {/* Printing a report always includes every order. */}
+                  <div className="print-only"><OrdersTable orders={r.orders} viewer={user.role} /></div>
+                </>
+              )}
             </section>
           </>
         )}
@@ -139,8 +151,8 @@ export function ReportsPage() {
 }
 
 function downloadCsv(r: Report) {
-  const header = ['Order', 'Date', 'Product', 'Supplier', 'Buyer', 'Quantity', 'Unit', 'Unit price', 'Total', 'Status']
-  const lines = r.orders.map((o) => [o.orderNo, o.createdAt.slice(0, 10), o.productName, o.supplier.companyName, o.buyer.companyName, o.quantity, o.unit, o.unitPrice, o.totalAmount, o.status])
+  const header = ['Order', 'Date', 'Product', 'Supplier', 'Buyer', 'Quantity', 'Received', 'Returned', 'Unit', 'Unit price', 'Total', 'Status']
+  const lines = r.orders.map((o) => [o.orderNo, o.createdAt.slice(0, 10), o.productName, o.supplier.companyName, o.buyer.companyName, o.quantity, o.receivedQty ?? '', o.returnedQty, o.unit, o.unitPrice, o.totalAmount, o.status])
   const csv = [header, ...lines].map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
   const a = document.createElement('a')

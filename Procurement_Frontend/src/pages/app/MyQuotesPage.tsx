@@ -1,14 +1,17 @@
 import { Link, useNavigate } from 'react-router'
 import { FileText } from 'lucide-react'
 import { quoteApi } from '../../api/endpoints'
+import { Pagination } from '../../components/Pagination'
 import { AsyncBlock, Badge, EmptyState, PageHeader } from '../../components/ui'
 import { formatDate, formatMoney, formatNumber } from '../../lib/format'
 import { useApi } from '../../lib/useApi'
+import { usePagination } from '../../lib/usePagination'
 
 /** Supplier: every quote I have sent and what happened to it. */
 export function MyQuotesPage() {
   const { data, loading, error } = useApi(() => quoteApi.mine(), [])
   const navigate = useNavigate()
+  const paging = usePagination(data ?? [], 10)
   return (
     <>
       <PageHeader title="My quotes" subtitle="Quotes you sent for buyers’ requests."
@@ -24,7 +27,7 @@ export function MyQuotesPage() {
                   <tr><th>Request</th><th>Buyer</th><th className="num">Price</th><th className="num">Qty</th><th className="num">Total</th><th>Delivery</th><th>Status</th><th>Sent</th></tr>
                 </thead>
                 <tbody>
-                  {data?.map((q) => (
+                  {paging.pageItems.map((q) => (
                     <tr key={q.id} className="clickable" onClick={() => navigate(`/app/requests/${q.requestId}`)}>
                       <td className="strong stack-full">{q.requestTitle}</td>
                       <td data-label="Buyer">{q.buyer.companyName}</td>
@@ -39,6 +42,7 @@ export function MyQuotesPage() {
                 </tbody>
               </table>
             </div>
+            <Pagination {...paging.props} />
           </section>
         )}
       </AsyncBlock>

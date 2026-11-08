@@ -1,14 +1,39 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import { CalendarClock, ClipboardList, MapPin, Search, Store } from 'lucide-react'
+import { CalendarClock, ClipboardList, MapPin, Search, Star, Store, TrendingUp } from 'lucide-react'
 import { productApi, publicApi, requestApi } from '../../api/endpoints'
-import type { Category } from '../../api/types'
+import type { Category, PageResult, Product, ProductHighlights } from '../../api/types'
 import { useAuth } from '../../auth/AuthContext'
+import { Pagination } from '../../components/Pagination'
+import { ProductCard } from '../../components/ProductCard'
 import { AsyncBlock, Badge, EmptyState, PageHeader, Thumb } from '../../components/ui'
 import { formatDate, formatMoney, formatNumber, timeAgo } from '../../lib/format'
 import { useApi } from '../../lib/useApi'
+import { usePagination } from '../../lib/usePagination'
 
-/** Common page for buyers and suppliers: all products + all open buying requests. */
+const PRODUCTS_PER_PAGE = 12
+
+const SORTS = [
+  { value: 'newest', label: 'Newest first' },
+  { value: 'rating', label: 'Top rated' },
+  { value: 'selling', label: 'Top selling' },
+  { value: 'price_asc', label: 'Price: low to high' },
+  { value: 'price_desc', label: 'Price: high to low' },
+]
+
+function HighlightRow({ title, icon, products }: { title: string; icon: ReactNode; products: Product[] }) {
+  if (products.length === 0) return null
+  return (
+    <section className="market-section">
+      <h2>{icon} {title}</h2>
+      <div className="product-grid product-grid-top">
+        {products.map((p) => <ProductCard product={p} key={p.id} />)}
+      </div>
+    </section>
+  )
+}
+
+/** Common page for all roles: all products + all open buying requests. */
 export function MarketplacePage() {
   const { user, hasMenu } = useAuth()
   const [params, setParams] = useSearchParams()
@@ -17,6 +42,16 @@ export function MarketplacePage() {
   const [search, setSearch] = useState('')
   const [categoryId, setCategoryId] = useState<number | null>(null)
   const [categories, setCategories] = useState<Category[]>([])
+  const [sort, setSort] = useState('newest')
+  const [page, setPage] = useState(1)
+
+  // A new search, category, sort or tab starts again from page 1.
+  const filterKey = `${tab}|${search}|${categoryId}|${sort}`
+  const [lastFilterKey, setLastFilterKey] = useState(filterKey)
+  if (lastFilterKey !== filterKey) {
+    setLastFilterKey(filterKey)
+    setPage(1)
+  }
 
   useEffect(() => {
     publicApi.categories().then(setCategories).catch(() => {})
@@ -28,14 +63,27 @@ export function MarketplacePage() {
     return () => window.clearTimeout(t)
   }, [q])
 
-  const products = useApi(() => (tab === 'products' ? productApi.marketplace(search, categoryId) : Promise.resolve([])), [tab, search, categoryId])
+  const products = useApi<PageResult<Product> | null>(
+    () => (tab === 'products' ? productApi.page({ q: search, categoryId, sort, page: page - 1, size: PRODUCTS_PER_PAGE }) : Promise.resolve(null)),
+    [tab, search, categoryId, sort, page],
+  )
   const requests = useApi(() => (tab === 'requests' ? requestApi.open(search, categoryId) : Promise.resolve([])), [tab, search, categoryId])
+  const requestPages = usePagination(requests.data ?? [], 8, filterKey)
+
+  // Top rated / top selling rows show on the plain marketplace, not on search results.
+  const showHighlights = tab === 'products' && !search && !categoryId
+  const highlights = useApi<ProductHighlights | null>(() => (showHighlights ? productApi.highlights() : Promise.resolve(null)), [showHighlights])
+
+  const lastPage = products.data?.totalPages ?? 0
+  if (lastPage > 0 && page > lastPage) setPage(lastPage)
 
   return (
     <>
       <PageHeader
         title="Marketplace"
-        subtitle="Products from every supplier and what buyers are looking for."
+        subtitle={user?.role === 'ADMIN'
+          ? 'Every product on sale with its price, availability, rating and supplier. Open a product for full details.'
+          : 'Products from every supplier and what buyers are looking for.'}
         actions={
           user?.role === 'BUYER' && hasMenu('my_requests') ? (
             <Link className="btn btn-primary" to="/app/my-requests?new=1"><ClipboardList size={16} /> Post a buying request</Link>
@@ -63,40 +111,43 @@ export function MarketplacePage() {
             <option value="">All categories</option>
             {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
+          {tab === 'products' && (
+            <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort products">
+              {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+          )}
         </div>
       </div>
 
       {tab === 'products' ? (
-        <AsyncBlock loading={products.loading} error={products.error}>
-          {products.data?.length === 0 ? (
-            <EmptyState title="No products found" text="Try another search or category." />
-          ) : (
-            <div className="product-grid">
-              {products.data?.map((p) => (
-                <Link to={`/app/products/${p.id}`} className="product-card" key={p.id}>
-                  <Thumb src={p.imageUrl} alt={p.name} />
-                  <div className="product-card-body">
-                    {p.category && <span className="product-cat">{p.category.name}</span>}
-                    <h3>{p.name}</h3>
-                    <p className="product-price">{formatMoney(p.price)} <small>/ {p.unit}</small></p>
-                    <p className="product-meta">MOQ {formatNumber(p.minOrderQty)} · Stock {formatNumber(p.stockQty)} {p.unit}</p>
-                    <p className="product-supplier">
-                      {p.supplier.companyName}
-                      {p.supplier.city && <span><MapPin size={12} aria-hidden="true" /> {p.supplier.city}</span>}
-                    </p>
-                  </div>
-                </Link>
-              ))}
-            </div>
+        <>
+          {showHighlights && page === 1 && highlights.data && (
+            <>
+              <HighlightRow title="Top rated products" icon={<Star size={20} className="icon-star" fill="currentColor" aria-hidden="true" />} products={highlights.data.topRated} />
+              <HighlightRow title="Top selling products" icon={<TrendingUp size={20} className="icon-selling" aria-hidden="true" />} products={highlights.data.topSelling} />
+            </>
           )}
-        </AsyncBlock>
+          <AsyncBlock loading={products.loading} error={products.error}>
+            {products.data?.items.length === 0 ? (
+              <EmptyState title="No products found" text="Try another search or category." />
+            ) : (
+              <section className="market-section">
+                {showHighlights && <h2><Store size={20} aria-hidden="true" /> All products</h2>}
+                <div className="product-grid">
+                  {products.data?.items.map((p) => <ProductCard product={p} key={p.id} />)}
+                </div>
+                {products.data && <Pagination page={page} totalPages={products.data.totalPages} totalItems={products.data.totalItems} pageSize={PRODUCTS_PER_PAGE} onChange={setPage} />}
+              </section>
+            )}
+          </AsyncBlock>
+        </>
       ) : (
         <AsyncBlock loading={requests.loading} error={requests.error}>
           {requests.data?.length === 0 ? (
             <EmptyState icon={<ClipboardList size={32} />} title="No open buying requests" text="When buyers post what they need, it shows up here." />
           ) : (
             <div className="request-list">
-              {requests.data?.map((r) => (
+              {requestPages.pageItems.map((r) => (
                 <Link to={`/app/requests/${r.id}`} className="request-card card" key={r.id}>
                   <Thumb src={r.imageUrl} alt={r.title} size="sm" />
                   <div className="grow">
@@ -119,6 +170,7 @@ export function MarketplacePage() {
                   )}
                 </Link>
               ))}
+              <Pagination {...requestPages.props} />
             </div>
           )}
         </AsyncBlock>
