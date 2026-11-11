@@ -1,0 +1,32 @@
+# Render Blueprint: creates the backend API as a free Docker web service.
+# Render > New > Blueprint > pick this repo. It asks for the values marked "sync: false".
+# (Creating the web service by hand works too - see docs/DEPLOY.md.)
+services:
+  - type: web
+    name: procureai-api
+    runtime: docker
+    plan: free
+    region: frankfurt
+    branch: main
+    rootDir: Procurement_Backend
+    dockerContext: ./Procurement_Backend
+    dockerfilePath: ./Procurement_Backend/Dockerfile
+    healthCheckPath: /actuator/health
+    envVars:
+      # Supabase Session pooler, e.g. jdbc:postgresql://aws-0-eu-central-1.pooler.supabase.com:5432/postgres?sslmode=require
+      - key: DB_URL
+        sync: false
+      # Supabase pooler user, e.g. postgres.abcdefghijklmnop
+      - key: SPRING_DATASOURCE_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      # Password of the first admin account. Do not reuse the demo password from the README.
+      - key: APP_ADMIN_PASSWORD
+        sync: false
+      # Secret that signs login tokens; Render generates a random one.
+      - key: JWT_SECRET
+        generateValue: true
+      # The free Supabase pooler allows only a few connections; 5 is plenty for this app.
+      - key: SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE
+        value: "5"

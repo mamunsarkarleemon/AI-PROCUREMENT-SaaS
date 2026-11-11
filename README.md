@@ -10,7 +10,7 @@ A web platform for Qatar SMEs. **Buyers** find products, post buying requests, n
 | Frontend | React 19, TypeScript, Vite, React Router, Recharts, Lucide icons | [Procurement_Frontend](Procurement_Frontend) |
 | Database | PostgreSQL 18 | `procurement_db` |
 
-API reference: [docs/API.md](docs/API.md) · Postman: [docs/postman/ProcureAI.postman_collection.json](docs/postman/ProcureAI.postman_collection.json)
+Deploy for free: [docs/DEPLOY.md](docs/DEPLOY.md) · API reference: [docs/API.md](docs/API.md) · Postman: [docs/postman/ProcureAI.postman_collection.json](docs/postman/ProcureAI.postman_collection.json)
 
 ---
 

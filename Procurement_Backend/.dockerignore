@@ -1,0 +1,6 @@
+target
+uploads
+config
+HELP.md
+.mvn/wrapper/maven-wrapper.jar
+*.log
